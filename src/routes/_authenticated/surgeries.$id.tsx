@@ -51,7 +51,7 @@ function SurgeryDetail() {
   }, [id, qc]);
 
   const update = useMutation({
-    mutationFn: async (status: string) => {
+    mutationFn: async (status: typeof STATUS_ORDER[number]) => {
       const { error } = await supabase.from("surgeries").update({ status }).eq("id", id);
       if (error) throw error;
     },
