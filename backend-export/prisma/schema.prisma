@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  admin
+  jefe_quirofano
+  medico
+  administrativo
+  enfermero
+  familiar
+}
+
+enum SurgeryStatus {
+  programada
+  ingreso
+  preoperatorio
+  en_quirofano
+  recuperacion
+  postoperatorio
+  alta
+  cancelada
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  roles        UserRole[]
+  statusChanges SurgeryStatusHistory[]
+}
+
+model UserRole {
+  id     String  @id @default(uuid())
+  userId String
+  role   AppRole
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+}
+
+model Patient {
+  id           String     @id @default(uuid())
+  firstName    String
+  lastName     String
+  documentId   String     @unique
+  birthDate    DateTime?
+  phone        String?
+  email        String?
+  address      String?
+  bloodType    String?
+  allergies    String?
+  notes        String?
+  deletedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  surgeries    Surgery[]
+  appointments Appointment[]
+
+  @@index([lastName, firstName])
+}
+
+model OperatingRoom {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  name      String
+  floor     String?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  surgeries Surgery[]
+}
+
+model Surgery {
+  id              String         @id @default(uuid())
+  publicCode      String         @unique // mostrado en la pantalla pública
+  patientId       String
+  operatingRoomId String?
+  procedure       String
+  surgeonName     String?
+  scheduledAt     DateTime
+  startedAt       DateTime?
+  endedAt         DateTime?
+  status          SurgeryStatus  @default(programada)
+  priority        String?        // baja | normal | alta | urgencia
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  patient         Patient        @relation(fields: [patientId], references: [id])
+  operatingRoom   OperatingRoom? @relation(fields: [operatingRoomId], references: [id])
+  history         SurgeryStatusHistory[]
+
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model SurgeryStatusHistory {
+  id         String        @id @default(uuid())
+  surgeryId  String
+  status     SurgeryStatus
+  changedBy  String?
+  note       String?
+  createdAt  DateTime      @default(now())
+
+  surgery    Surgery       @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+  changedByUser User?      @relation(fields: [changedBy], references: [id])
+
+  @@index([surgeryId])
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  patientId   String
+  scheduledAt DateTime
+  type        String   // consulta | prequirurgica | control | estudio
+  status      String   @default("pendiente") // pendiente | confirmado | cancelado | completado
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient     Patient  @relation(fields: [patientId], references: [id])
+
+  @@index([scheduledAt])
+}
