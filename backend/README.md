@@ -1,149 +1,152 @@
-# SSC Backend — Express + Prisma + PostgreSQL
+# SSC — Sistema de Seguimiento de Cirugías Especializadas
 
-Backend del Sistema de Seguimiento de Cirugías Especializadas.
-Reemplaza a Supabase con tu propia base PostgreSQL local.
+Sistema hospitalario para el seguimiento y gestión de cirugías, con panel web administrativo y app móvil.
 
-## Stack
-- Node.js 20+ / TypeScript
-- Express 4
-- Prisma ORM
-- PostgreSQL 15+ (instalado localmente)
-- JWT (jsonwebtoken) + bcrypt
-- Socket.io (tiempo real para Dashboard y Pantalla Pública)
-- Zod (validación)
+---
 
 ## Requisitos previos
-1. **Node.js 20+** → https://nodejs.org
-2. **PostgreSQL 15+** instalado en tu PC → https://www.postgresql.org/download/
-3. **VSCode** con extensiones recomendadas: Prisma, ESLint, REST Client
 
-## Setup paso a paso
+- [Node.js](https://nodejs.org/) v18 o superior
+- [PostgreSQL](https://www.postgresql.org/) v14 o superior
+- [npm](https://www.npmjs.com/)
 
-### 1. Crear la base de datos
-Abrí `psql` (o pgAdmin) y ejecutá:
-```sql
-CREATE DATABASE ssc_db;
-CREATE USER ssc_user WITH PASSWORD 'ssc_pass_segura';
-GRANT ALL PRIVILEGES ON DATABASE ssc_db TO ssc_user;
-ALTER DATABASE ssc_db OWNER TO ssc_user;
+---
+
+## Configuración inicial (primera vez)
+
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/TU_USUARIO/SSC-Sistema-de-Seguimiento-de-Cirugias.git
+cd SSC-Sistema-de-Seguimiento-de-Cirugias
 ```
 
-### 2. Instalar dependencias
+### 2. Crear el usuario y base de datos en PostgreSQL
+
+Abrí el psql shell (buscá "SQL Shell (psql)" en el menú inicio) y presioná Enter en todo hasta que pida contraseña:
+
+```
+Server [localhost]: Enter
+Database [postgres]: Enter
+Port [5432]: Enter
+Username [postgres]: Enter
+Password for user postgres: TU_PASSWORD
+```
+
+Una vez dentro del prompt `postgres=#`, ejecutá:
+
+```sql
+CREATE USER ssc_user WITH PASSWORD 'ssc_pass_segura';
+CREATE DATABASE ssc_db OWNER ssc_user;
+GRANT ALL PRIVILEGES ON DATABASE ssc_db TO ssc_user;
+ALTER USER ssc_user CREATEDB;
+\q
+```
+
+### 3. Configurar el backend
+
 ```bash
-cd backend-export
+cd backend
+cp .env.example .env
 npm install
 ```
 
-### 3. Configurar variables de entorno
-Copiá `.env.example` a `.env` y editá:
-```bash
-cp .env.example .env
-```
-Ajustá `DATABASE_URL` con tu usuario/password/puerto:
-```
-DATABASE_URL="postgresql://ssc_user:ssc_pass_segura@localhost:5432/ssc_db"
-JWT_SECRET="cambiar-por-string-aleatorio-largo"
-PORT=4000
-CORS_ORIGIN="http://localhost:3000"
-```
+El archivo `.env` ya viene preconfigurado para las credenciales anteriores. Si usás otras, editá `DATABASE_URL` en `.env`.
 
-### 4. Crear el schema en Postgres
-```bash
-npx prisma migrate dev --name init
-npx prisma generate
-```
+### 4. Correr migraciones y seed
 
-### 5. (Opcional) Seed con datos demo
 ```bash
+npx prisma migrate dev
 npm run seed
 ```
-Crea un admin: `admin@ssc.local` / `Admin123!`
 
-### 6. Levantar el servidor
+Cuando `prisma migrate dev` pida un nombre para la migración, escribí `init` o presioná Enter.
+
+### 5. Configurar el frontend
+
 ```bash
+cd ../frontend
+npm install
+```
+
+---
+
+## Levantar el proyecto (uso diario)
+
+Abrí **dos terminales** y ejecutá una en cada una:
+
+**Terminal 1 — Backend:**
+```bash
+cd backend
 npm run dev
 ```
-API en `http://localhost:4000` · Socket.io en el mismo puerto.
+Deberías ver: `SSC backend escuchando en http://localhost:4000`
 
-## Endpoints principales
-
-### Auth
-- `POST /api/auth/register` `{ email, password, fullName }`
-- `POST /api/auth/login` `{ email, password }` → `{ token, user }`
-- `GET /api/auth/me` (Bearer token)
-
-### Pacientes (auth + rol staff)
-- `GET /api/patients`
-- `POST /api/patients`
-- `PATCH /api/patients/:id`
-- `DELETE /api/patients/:id` (soft delete)
-
-### Cirugías
-- `GET /api/surgeries`
-- `GET /api/surgeries/:id`
-- `POST /api/surgeries`
-- `PATCH /api/surgeries/:id` (cambios de estado disparan evento realtime)
-- `GET /api/surgeries/:id/history`
-
-### Quirófanos
-- `GET /api/operating-rooms`
-- `POST /api/operating-rooms`
-
-### Turnos
-- `GET /api/appointments`
-- `POST /api/appointments`
-
-### Público (sin auth) — pantalla familiares
-- `GET /api/public/board` → lista de cirugías del día con campos seguros (código, estado, hora). Sin datos del paciente.
-
-## Tiempo real (Socket.io)
-Conectarse desde el frontend:
-```ts
-import { io } from "socket.io-client";
-const socket = io("http://localhost:4000");
-socket.on("surgery:update", (payload) => { /* ... */ });
+**Terminal 2 — Frontend:**
+```bash
+cd frontend
+npm run dev
 ```
-Eventos emitidos:
-- `surgery:update` — al cambiar estado de cualquier cirugía
-- `surgery:created`
-- `surgery:deleted`
+Deberías ver la URL local, generalmente `http://localhost:3000`.
 
-## Conectar tu frontend (Lovable export)
-En el frontend, reemplazá los imports de `@/integrations/supabase/client` por el cliente que está en `frontend-adapter/api-client.ts` (incluido en este zip). Y en lugar de canales realtime de Supabase, usá `socket.io-client`. Ver `frontend-adapter/README.md`.
+> PostgreSQL debe estar corriendo. En Windows arranca automáticamente con el sistema.
 
-## Scripts
-- `npm run dev` — desarrollo con tsx watch
-- `npm run build` — compila a `dist/`
-- `npm start` — corre `dist/`
-- `npm run seed` — datos demo
-- `npx prisma studio` — UI para inspeccionar la DB
+---
 
-## Arquitectura
+## Credenciales de acceso por defecto
+
+| Campo    | Valor             |
+|----------|-------------------|
+| Email    | admin@ssc.com     |
+| Password | Admin123!         |
+
+---
+
+## Variables de entorno (backend)
+
+Archivo: `backend/.env`
+
+| Variable      | Descripción                          | Valor por defecto                                              |
+|---------------|--------------------------------------|----------------------------------------------------------------|
+| `DATABASE_URL`| Conexión a PostgreSQL                | `postgresql://ssc_user:ssc_pass_segura@localhost:5432/ssc_db` |
+| `JWT_SECRET`  | Clave secreta para tokens JWT        | Cambiar por string aleatorio de al menos 32 caracteres        |
+| `PORT`        | Puerto del servidor backend          | `4000`                                                         |
+| `CORS_ORIGIN` | Origen permitido para CORS           | `http://localhost:3000`                                        |
+| `NODE_ENV`    | Entorno de ejecución                 | `development`                                                  |
+
+---
+
+## Estructura del proyecto
+
 ```
-backend-export/
-├── prisma/
-│   ├── schema.prisma         # Modelo de datos
-│   └── seed.ts               # Datos iniciales
-├── src/
-│   ├── server.ts             # Bootstrap Express + Socket.io
-│   ├── lib/
-│   │   ├── prisma.ts         # Cliente Prisma singleton
-│   │   ├── auth.ts           # JWT helpers
-│   │   └── realtime.ts       # Emisor de eventos socket.io
-│   ├── middleware/
-│   │   ├── auth.ts           # requireAuth + requireRole
-│   │   └── error.ts          # handler global
-│   └── routes/
-│       ├── auth.ts
-│       ├── patients.ts
-│       ├── surgeries.ts
-│       ├── operating-rooms.ts
-│       ├── appointments.ts
-│       └── public.ts
-└── README.md
+SSC-Sistema-de-Seguimiento-de-Cirugias/
+├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma
+│   │   ├── seed.ts
+│   │   └── migrations/
+│   ├── src/
+│   │   ├── routes/
+│   │   └── server.ts
+│   ├── .env
+│   └── package.json
+└── frontend/
+    ├── src/
+    └── package.json
 ```
 
-## Roles soportados
-`admin` · `jefe_quirofano` · `medico` · `administrativo` · `enfermero` · `familiar`
+---
 
-El primer usuario registrado obtiene rol `admin` automáticamente.
+## Solución de problemas frecuentes
+
+**`Authentication failed` al iniciar el backend**
+→ El usuario `ssc_user` no existe en PostgreSQL. Seguí el paso 2 de la configuración inicial.
+
+**`P3014` — cannot create shadow database**
+→ El usuario no tiene permisos. Ejecutá en psql: `ALTER USER ssc_user CREATEDB;`
+
+**`Failed to fetch` en el frontend**
+→ El backend no está corriendo o está en un puerto distinto. Verificá que `npm run dev` en el backend muestre el puerto `4000`.
+
+**`Environment variable not found: DATABASE_URL`**
+→ No existe el archivo `.env` en la carpeta `backend/`. Ejecutá `cp .env.example .env`.
