@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff } from "../middleware/auth.js";
+import { requireAuth, requireStaff, requireAbm, requireSurgeryStatusChange } from "../middleware/auth.js";
 import { emit } from "../lib/realtime.js";
 
 const router = Router();
@@ -12,6 +12,7 @@ const STATUSES = [
   "recuperacion", "postoperatorio", "alta", "cancelada",
 ] as const;
 
+// Datos generales de la cirugía (ABM). El estado se cambia aparte, por /:id/status.
 const surgerySchema = z.object({
   publicCode: z.string().min(1),
   patientId: z.string().uuid(),
@@ -22,6 +23,13 @@ const surgerySchema = z.object({
   priority: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   status: z.enum(STATUSES).optional(),
+});
+
+const surgeryEditSchema = surgerySchema.omit({ status: true }).partial();
+
+const statusSchema = z.object({
+  status: z.enum(STATUSES),
+  note: z.string().optional().nullable(),
 });
 
 router.get("/", async (_req, res, next) => {
@@ -59,7 +67,7 @@ router.get("/:id/history", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", requireAbm, async (req, res, next) => {
   try {
     const data = surgerySchema.parse(req.body);
     const created = await prisma.surgery.create({
@@ -75,9 +83,9 @@ router.post("/", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.patch("/:id", async (req, res, next) => {
+router.patch("/:id", requireAbm, async (req, res, next) => {
   try {
-    const data = surgerySchema.partial().parse(req.body);
+    const data = surgeryEditSchema.parse(req.body);
     const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
     if (!current) return res.status(404).json({ error: "No encontrada" });
 
@@ -90,9 +98,26 @@ router.patch("/:id", async (req, res, next) => {
       include: { patient: true, operatingRoom: true },
     });
 
-    if (data.status && data.status !== current.status) {
+    emit("surgery:update", updated);
+    res.json(updated);
+  } catch (e) { next(e); }
+});
+
+router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) => {
+  try {
+    const data = statusSchema.parse(req.body);
+    const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
+    if (!current) return res.status(404).json({ error: "No encontrada" });
+
+    const updated = await prisma.surgery.update({
+      where: { id: req.params.id },
+      data: { status: data.status },
+      include: { patient: true, operatingRoom: true },
+    });
+
+    if (data.status !== current.status) {
       await prisma.surgeryStatusHistory.create({
-        data: { surgeryId: updated.id, status: data.status, changedBy: req.user!.sub },
+        data: { surgeryId: updated.id, status: data.status, changedBy: req.user!.sub, note: data.note },
       });
     }
 
@@ -101,7 +126,7 @@ router.patch("/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", requireAbm, async (req, res, next) => {
   try {
     await prisma.surgery.delete({ where: { id: req.params.id } });
     emit("surgery:deleted", { id: req.params.id });

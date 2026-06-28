@@ -5,7 +5,6 @@ interface AuthCtx {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => void;
 }
 
@@ -23,7 +22,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     loading,
     async login(email, password) { setUser(await auth.login(email, password)); },
-    async register(email, password, fullName) { setUser(await auth.register(email, password, fullName)); },
     signOut() { auth.signOut(); setUser(null); },
   };
 

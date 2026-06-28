@@ -7,6 +7,7 @@ import { Server as SocketServer } from "socket.io";
 import { setIo } from "./lib/realtime.js";
 import { errorHandler } from "./middleware/error.js";
 import authRoutes from "./routes/auth.js";
+import userRoutes from "./routes/users.js";
 import patientRoutes from "./routes/patients.js";
 import surgeryRoutes from "./routes/surgeries.js";
 import roomRoutes from "./routes/operating-rooms.js";
@@ -26,6 +27,7 @@ app.use(express.json());
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/surgeries", surgeryRoutes);
 app.use("/api/operating-rooms", roomRoutes);

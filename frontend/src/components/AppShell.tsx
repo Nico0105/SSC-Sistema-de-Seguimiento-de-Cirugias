@@ -1,21 +1,24 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
+import { ADMIN_ROLES, hasAnyRole, type Role } from "../lib/permissions";
 
-const nav = [
+const nav: { to: string; label: string; roles?: Role[] }[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/surgeries", label: "Cirugías" },
   { to: "/patients", label: "Pacientes" },
   { to: "/appointments", label: "Turnos" },
+  { to: "/users", label: "Usuarios", roles: ADMIN_ROLES },
 ];
 
 export default function AppShell() {
   const { user, signOut } = useAuth();
+  const visibleNav = nav.filter((n) => !n.roles || hasAnyRole(user?.roles, n.roles));
   return (
     <div className="min-h-full flex">
       <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col">
         <div className="text-xl font-bold text-brand-700 mb-8">SSC</div>
         <nav className="flex-1 space-y-1">
-          {nav.map((n) => (
+          {visibleNav.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

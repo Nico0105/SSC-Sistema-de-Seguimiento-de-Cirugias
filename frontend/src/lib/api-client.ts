@@ -53,11 +53,6 @@ export const auth = {
     setToken(data.token);
     return data.user;
   },
-  async register(email: string, password: string, fullName: string) {
-    const data = await api.post<{ token: string; user: User }>("/api/auth/register", { email, password, fullName });
-    setToken(data.token);
-    return data.user;
-  },
   async me() {
     if (!getToken()) return null;
     try { return await api.get<User>("/api/auth/me"); }

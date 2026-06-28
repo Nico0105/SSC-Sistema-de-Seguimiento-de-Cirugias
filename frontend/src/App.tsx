@@ -5,6 +5,7 @@ import Patients from "./pages/Patients";
 import Surgeries from "./pages/Surgeries";
 import SurgeryDetail from "./pages/SurgeryDetail";
 import Appointments from "./pages/Appointments";
+import Users from "./pages/Users";
 import Board from "./pages/Board";
 import AppShell from "./components/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/surgeries" element={<Surgeries />} />
         <Route path="/surgeries/:id" element={<SurgeryDetail />} />
         <Route path="/appointments" element={<Appointments />} />
+        <Route path="/users" element={<Users />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

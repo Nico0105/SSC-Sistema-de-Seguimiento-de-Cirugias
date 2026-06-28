@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api-client";
+import { useAuth } from "../lib/auth-context";
+import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
 
 interface Patient {
   id: string;
@@ -12,6 +14,8 @@ interface Patient {
 }
 
 export default function Patients() {
+  const { user } = useAuth();
+  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
   const [list, setList] = useState<Patient[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", documentId: "", phone: "", email: "", bloodType: "" });
@@ -47,15 +51,17 @@ export default function Patients() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Pacientes</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-        >
-          {showForm ? "Cancelar" : "+ Nuevo paciente"}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            {showForm ? "Cancelar" : "+ Nuevo paciente"}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && canEdit && (
         <form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 grid grid-cols-3 gap-4">
           {(["firstName","lastName","documentId","phone","email","bloodType"] as const).map((f) => (
             <div key={f}>
@@ -83,7 +89,7 @@ export default function Patients() {
               <th className="text-left px-6 py-3">Nombre</th>
               <th className="text-left px-6 py-3">Contacto</th>
               <th className="text-left px-6 py-3">Sangre</th>
-              <th className="px-6 py-3"></th>
+              {canEdit && <th className="px-6 py-3"></th>}
             </tr>
           </thead>
           <tbody>
@@ -93,12 +99,14 @@ export default function Patients() {
                 <td className="px-6 py-3">{p.lastName}, {p.firstName}</td>
                 <td className="px-6 py-3 text-slate-500">{p.phone ?? p.email ?? "—"}</td>
                 <td className="px-6 py-3">{p.bloodType ?? "—"}</td>
-                <td className="px-6 py-3 text-right">
-                  <button onClick={() => remove(p.id)} className="text-rose-600 text-xs hover:underline">Eliminar</button>
-                </td>
+                {canEdit && (
+                  <td className="px-6 py-3 text-right">
+                    <button onClick={() => remove(p.id)} className="text-rose-600 text-xs hover:underline">Eliminar</button>
+                  </td>
+                )}
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400">Sin pacientes</td></tr>}
+            {list.length === 0 && <tr><td colSpan={canEdit ? 5 : 4} className="px-6 py-10 text-center text-slate-400">Sin pacientes</td></tr>}
           </tbody>
         </table>
       </div>

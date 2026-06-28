@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff } from "../middleware/auth.js";
+import { requireAuth, requireStaff, requireAbm } from "../middleware/auth.js";
 
 const router = Router();
 router.use(requireAuth, requireStaff);
@@ -24,7 +24,7 @@ router.get("/", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", requireAbm, async (req, res, next) => {
   try {
     const data = schema.parse(req.body);
     const created = await prisma.appointment.create({
@@ -35,7 +35,7 @@ router.post("/", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.patch("/:id", async (req, res, next) => {
+router.patch("/:id", requireAbm, async (req, res, next) => {
   try {
     const data = schema.partial().parse(req.body);
     const updated = await prisma.appointment.update({
@@ -49,7 +49,7 @@ router.patch("/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", requireAbm, async (req, res, next) => {
   try {
     await prisma.appointment.delete({ where: { id: req.params.id } });
     res.status(204).end();

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getSocket } from "../lib/api-client";
+import { useAuth } from "../lib/auth-context";
+import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
 import { STATUS_LABEL, STATUS_COLOR, type SurgeryStatus } from "../lib/surgery-status";
 
 interface Surgery {
@@ -17,6 +19,8 @@ interface Patient { id: string; firstName: string; lastName: string; }
 interface Room { id: string; code: string; name: string; }
 
 export default function Surgeries() {
+  const { user } = useAuth();
+  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
   const [list, setList] = useState<Surgery[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -67,12 +71,14 @@ export default function Surgeries() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Cirugías</h1>
-        <button onClick={() => setShowForm(!showForm)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          {showForm ? "Cancelar" : "+ Nueva cirugía"}
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowForm(!showForm)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            {showForm ? "Cancelar" : "+ Nueva cirugía"}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && canEdit && (
         <form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 grid grid-cols-2 gap-4">
           <Input label="Código público" value={form.publicCode} onChange={(v) => setForm({ ...form, publicCode: v })} required />
           <Input label="Procedimiento" value={form.procedure} onChange={(v) => setForm({ ...form, procedure: v })} required />

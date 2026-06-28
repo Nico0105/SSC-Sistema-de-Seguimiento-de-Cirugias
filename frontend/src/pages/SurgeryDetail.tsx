@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, getSocket } from "../lib/api-client";
+import { useAuth } from "../lib/auth-context";
+import { STATUS_CHANGE_ROLES, hasAnyRole } from "../lib/permissions";
 import { SURGERY_STATUSES, STATUS_LABEL, STATUS_COLOR, type SurgeryStatus } from "../lib/surgery-status";
 
 interface Surgery {
@@ -20,6 +22,8 @@ interface Surgery {
 
 export default function SurgeryDetail() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const canChangeStatus = hasAnyRole(user?.roles, STATUS_CHANGE_ROLES);
   const [surgery, setSurgery] = useState<Surgery | null>(null);
 
   async function load() {
@@ -35,7 +39,7 @@ export default function SurgeryDetail() {
   }, [id]);
 
   async function changeStatus(status: SurgeryStatus) {
-    await api.patch(`/api/surgeries/${id}`, { status });
+    await api.patch(`/api/surgeries/${id}/status`, { status });
     load();
   }
 
@@ -70,6 +74,7 @@ export default function SurgeryDetail() {
         </Card>
       </div>
 
+      {canChangeStatus && (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <h2 className="font-semibold text-slate-800 mb-3">Cambiar estado</h2>
         <div className="flex flex-wrap gap-2">
@@ -89,6 +94,7 @@ export default function SurgeryDetail() {
           ))}
         </div>
       </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6">
         <h2 className="font-semibold text-slate-800 mb-3">Línea de tiempo</h2>

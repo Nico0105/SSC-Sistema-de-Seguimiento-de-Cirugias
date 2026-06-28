@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api-client";
+import { useAuth } from "../lib/auth-context";
+import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
 
 interface Appointment {
   id: string;
@@ -12,6 +14,8 @@ interface Appointment {
 interface Patient { id: string; firstName: string; lastName: string; }
 
 export default function Appointments() {
+  const { user } = useAuth();
+  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
   const [list, setList] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -45,12 +49,14 @@ export default function Appointments() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Turnos</h1>
-        <button onClick={() => setShowForm(!showForm)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          {showForm ? "Cancelar" : "+ Nuevo turno"}
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowForm(!showForm)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            {showForm ? "Cancelar" : "+ Nuevo turno"}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && canEdit && (
         <form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 grid grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Paciente</label>

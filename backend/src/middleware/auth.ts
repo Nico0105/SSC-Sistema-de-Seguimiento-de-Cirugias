@@ -31,9 +31,20 @@ export function requireRole(...roles: string[]) {
   };
 }
 
+// Cualquier rol interno (no familiar) — usado para lectura general.
 export const requireStaff = requireRole(
   "admin",
-  "administrativo",
   "jefe_quirofano",
   "medico",
+  "administrativo",
+  "enfermero",
 );
+
+// ABM de pacientes/turnos/cirugías.
+export const requireAbm = requireRole("admin", "jefe_quirofano", "administrativo");
+
+// Cambiar el estado de una cirugía.
+export const requireSurgeryStatusChange = requireRole("admin", "jefe_quirofano", "enfermero");
+
+// Gestión de usuarios.
+export const requireAdmin = requireRole("admin");
