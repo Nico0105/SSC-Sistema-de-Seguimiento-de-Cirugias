@@ -11,7 +11,8 @@ export type Role =
   | "medico"
   | "administrativo"
   | "enfermero"
-  | "familiar";
+  | "familiar"
+  | "paciente";
 
 /** Etiquetas en español que ve el usuario. */
 export const ROLE_LABEL: Record<Role, string> = {
@@ -21,6 +22,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   administrativo: "Administrativo",
   enfermero: "Enfermero",
   familiar: "Familiar",
+  paciente: "Paciente",
 };
 
 /** Pueden crear/editar/eliminar pacientes, cirugías, turnos y quirófanos. */
@@ -31,6 +33,15 @@ export const STATUS_CHANGE_ROLES: Role[] = ["admin", "jefe_quirofano", "enfermer
 
 /** Acceso a la gestión de usuarios. */
 export const ADMIN_ROLES: Role[] = ["admin"];
+
+/** Roles internos del hospital: acceden al panel de gestión completo. */
+export const STAFF_ROLES: Role[] = ["admin", "jefe_quirofano", "medico", "administrativo", "enfermero"];
+
+/** Personal clínico: carga controles postoperatorios. */
+export const CLINICAL_ROLES: Role[] = ["admin", "jefe_quirofano", "medico", "enfermero"];
+
+/** Rol de autogestión del paciente (portal "Mi seguimiento"). */
+export const PATIENT_ROLES: Role[] = ["paciente"];
 
 /** true si el usuario tiene al menos uno de los roles permitidos. */
 export function hasAnyRole(userRoles: string[] | undefined, allowed: Role[]): boolean {

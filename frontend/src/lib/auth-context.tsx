@@ -18,6 +18,7 @@ import {
   type ReactNode,
 } from "react";
 import { auth, UNAUTHORIZED_EVENT, type User } from "./api-client";
+import { registerWebPush } from "./push";
 
 interface AuthCtx {
   /** Usuario autenticado, o null si no hay sesión. */
@@ -44,6 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Con sesión activa se intenta registrar el push web (FCM).
+  // Es un no-op si Firebase no está configurado en el .env.
+  useEffect(() => {
+    if (user) void registerWebPush();
+  }, [user]);
+
   // Cierre de sesión automático cuando el backend rechaza el token.
   useEffect(() => {
     const onUnauthorized = () => setUser(null);
@@ -52,7 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    setUser(await auth.login(email, password));
+    const logged = await auth.login(email, password);
+    setUser(logged);
+    void registerWebPush();
   }, []);
 
   const signOut = useCallback(() => {

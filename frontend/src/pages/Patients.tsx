@@ -6,6 +6,7 @@
 // la validación real la hace siempre el backend.
 // ======================================================
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
 import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
@@ -125,7 +126,7 @@ export default function Patients() {
                 <th className="text-left px-6 py-3">Nombre</th>
                 <th className="text-left px-6 py-3">Contacto</th>
                 <th className="text-left px-6 py-3">Sangre</th>
-                {canEdit && <th className="px-6 py-3"></th>}
+                <th className="px-6 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -135,16 +136,20 @@ export default function Patients() {
                   <td className="px-6 py-3">{p.lastName}, {p.firstName}</td>
                   <td className="px-6 py-3 text-slate-500">{p.phone ?? p.email ?? "—"}</td>
                   <td className="px-6 py-3">{p.bloodType ?? "—"}</td>
-                  {canEdit && (
-                    <td className="px-6 py-3 text-right">
+                  <td className="px-6 py-3 text-right space-x-3 whitespace-nowrap">
+                    {/* Historial clínico consolidado del paciente. */}
+                    <Link to={`/patients/${p.id}/history`} className="text-brand-600 text-xs hover:underline">
+                      Historia →
+                    </Link>
+                    {canEdit && (
                       <button onClick={() => void remove(p.id)} className="text-rose-600 text-xs hover:underline">
                         Eliminar
                       </button>
-                    </td>
-                  )}
+                    )}
+                  </td>
                 </tr>
               ))}
-              {list.length === 0 && <EmptyRow colSpan={canEdit ? 5 : 4}>Sin pacientes</EmptyRow>}
+              {list.length === 0 && <EmptyRow colSpan={5}>Sin pacientes</EmptyRow>}
             </tbody>
           </table>
         )}

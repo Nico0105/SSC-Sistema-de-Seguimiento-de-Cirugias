@@ -19,7 +19,7 @@ router.use(requireAuth, requireAdmin);
 
 /** Roles válidos del sistema (deben coincidir con el enum AppRole de Prisma). */
 const ROLES = [
-  "admin", "jefe_quirofano", "medico", "administrativo", "enfermero", "familiar",
+  "admin", "jefe_quirofano", "medico", "administrativo", "enfermero", "familiar", "paciente",
 ] as const;
 
 const createSchema = z.object({
@@ -27,6 +27,8 @@ const createSchema = z.object({
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
   fullName: z.string().min(2),
   roles: z.array(z.enum(ROLES)).min(1, "Debe asignarse al menos un rol"),
+  /** Paciente a vincular cuando la cuenta tiene rol "paciente". */
+  patientId: z.string().uuid().optional().nullable(),
 });
 
 const updateSchema = z.object({
@@ -58,19 +60,46 @@ router.get("/", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-/** Crea un usuario con contraseña hasheada y sus roles iniciales. */
+/**
+ * Crea un usuario con contraseña hasheada y sus roles iniciales.
+ * Si se envía `patientId` (cuentas con rol "paciente"), la cuenta queda
+ * vinculada a ese paciente en la misma transacción: así el paciente
+ * accede a SU información desde la app móvil.
+ */
 router.post("/", async (req, res, next) => {
   try {
     const data = createSchema.parse(req.body);
-    const created = await prisma.user.create({
-      data: {
-        email: data.email,
-        fullName: data.fullName,
-        passwordHash: await hashPassword(data.password),
-        roles: { create: data.roles.map((role) => ({ role })) },
-      },
-      include: { roles: true },
+
+    if (data.patientId) {
+      if (!data.roles.includes("paciente")) {
+        throw new HttpError(400, "Sólo las cuentas con rol paciente pueden vincularse a un paciente");
+      }
+      const patient = await prisma.patient.findFirst({
+        where: { id: data.patientId, deletedAt: null },
+      });
+      if (!patient) throw new HttpError(404, "El paciente a vincular no existe");
+      if (patient.userId) throw new HttpError(409, "Ese paciente ya tiene una cuenta vinculada");
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: data.email,
+          fullName: data.fullName,
+          passwordHash: await hashPassword(data.password),
+          roles: { create: data.roles.map((role) => ({ role })) },
+        },
+        include: { roles: true },
+      });
+      if (data.patientId) {
+        await tx.patient.update({
+          where: { id: data.patientId },
+          data: { userId: user.id },
+        });
+      }
+      return user;
     });
+
     res.status(201).json(serialize(created));
   } catch (e) { next(e); }
 });

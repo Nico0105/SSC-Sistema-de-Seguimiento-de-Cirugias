@@ -71,3 +71,12 @@ export const requireSurgeryStatusChange = requireRole("admin", "jefe_quirofano",
 
 /** Gestión de usuarios y roles (sólo administradores). */
 export const requireAdmin = requireRole("admin");
+
+/** Portal de autogestión del paciente (sólo ve su propia información). */
+export const requirePatient = requireRole("paciente");
+
+/** Personal clínico: carga controles postoperatorios y marca checklists. */
+export const requireClinical = requireRole("admin", "jefe_quirofano", "medico", "enfermero");
+
+/** Configuración de la plantilla del checklist preoperatorio. */
+export const requireChecklistAdmin = requireRole("admin", "jefe_quirofano");

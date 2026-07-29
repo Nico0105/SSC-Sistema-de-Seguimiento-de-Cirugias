@@ -49,4 +49,19 @@ export const env = {
   /** Duración del token de sesión. */
   jwtExpiresIn: "7d",
   corsOrigins: resolveCorsOrigins(),
+
+  // --- Emails transaccionales (Resend) ---------------------------
+  /** API key de Resend. Si falta, los emails se registran como "omitido". */
+  resendApiKey: process.env.RESEND_API_KEY ?? null,
+  /** Remitente de los emails (debe ser un dominio verificado en Resend). */
+  emailFrom: process.env.EMAIL_FROM ?? "SSC <onboarding@resend.dev>",
+
+  // --- Notificaciones push (Firebase Cloud Messaging) ------------
+  /**
+   * Credencial de service account de Firebase, como JSON en base64
+   * (recomendado para .env) o como ruta a un archivo .json.
+   * Si falta, el envío de push queda deshabilitado (no-op con log).
+   */
+  firebaseServiceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 ?? null,
+  firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH ?? null,
 } as const;

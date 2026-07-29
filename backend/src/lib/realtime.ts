@@ -1,14 +1,11 @@
 // ======================================================
 // Tiempo real (lib/realtime.ts)
-// Wrapper mínimo sobre Socket.io para emitir eventos de
+// Wrapper mínimo sobre Socket.IO para emitir eventos de
 // dominio (ej. "surgery:update") desde cualquier ruta sin
 // acoplar los controladores al servidor de sockets.
-//
-// Nota de diseño: la documentación funcional menciona un
-// servicio de tiempo real gestionado (Pusher); este módulo
-// cumple el mismo requisito con Socket.io autoalojado, sin
-// depender de credenciales de terceros. Si en el futuro se
-// migra a Pusher, sólo hay que reimplementar `emit`.
+// Socket.IO es el ÚNICO canal de tiempo real del sistema;
+// las notificaciones push van por Firebase Cloud Messaging
+// (lib/fcm.ts) y los emails por Resend (lib/email.ts).
 // ======================================================
 import type { Server as SocketServer } from "socket.io";
 

@@ -16,6 +16,13 @@ import { requireAuth, requireStaff, requireAbm, requireSurgeryStatusChange } fro
 import { emit } from "../lib/realtime.js";
 import { canTransition, ALLOWED_TRANSITIONS } from "../lib/surgery-status.js";
 import { HttpError } from "../middleware/error.js";
+import {
+  sendSurgeryConfirmation,
+  sendPreopInstructions,
+  sendSurgeryReschedule,
+  sendDischargeEmail,
+} from "../lib/email.js";
+import { notifySurgeryStatusChange, notifyDischarge } from "../lib/notifications.js";
 
 const router = Router();
 router.use(requireAuth, requireStaff);
@@ -104,6 +111,19 @@ router.post("/", requireAbm, async (req, res, next) => {
       include: { patient: true, operatingRoom: true },
     });
     emit("surgery:created", toRealtimePayload(created));
+
+    // Emails automáticos al paciente: confirmación + indicaciones
+    // preoperatorias (no bloquean la respuesta; se auditan en EmailLog).
+    const emailData = {
+      patientEmail: created.patient.email,
+      patientName: created.patient.firstName,
+      procedure: created.procedure,
+      scheduledAt: created.scheduledAt,
+      surgeryId: created.id,
+    };
+    void sendSurgeryConfirmation(emailData);
+    void sendPreopInstructions(emailData);
+
     res.status(201).json(created);
   } catch (e) { next(e); }
 });
@@ -112,6 +132,9 @@ router.post("/", requireAbm, async (req, res, next) => {
 router.patch("/:id", requireAbm, async (req, res, next) => {
   try {
     const data = surgerySchema.partial().parse(req.body);
+    const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
+    if (!current) return res.status(404).json({ error: "Cirugía no encontrada" });
+
     const updated = await prisma.surgery.update({
       where: { id: req.params.id },
       data: {
@@ -121,6 +144,18 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
       include: { patient: true, operatingRoom: true },
     });
     emit("surgery:update", toRealtimePayload(updated));
+
+    // Si cambió la fecha/hora, se avisa al paciente por email.
+    if (data.scheduledAt && updated.scheduledAt.getTime() !== current.scheduledAt.getTime()) {
+      void sendSurgeryReschedule({
+        patientEmail: updated.patient.email,
+        patientName: updated.patient.firstName,
+        procedure: updated.procedure,
+        scheduledAt: updated.scheduledAt,
+        surgeryId: updated.id,
+      });
+    }
+
     res.json(updated);
   } catch (e) { next(e); }
 });
@@ -171,6 +206,22 @@ router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) =
     });
 
     emit("surgery:update", toRealtimePayload(updated));
+
+    // Notificación push al paciente por el cambio de estado.
+    void notifySurgeryStatusChange(updated.patientId, updated.id, updated.procedure, updated.status);
+
+    // El alta médica además dispara email + push dedicados.
+    if (data.status === "alta") {
+      void sendDischargeEmail({
+        patientEmail: updated.patient.email,
+        patientName: updated.patient.firstName,
+        procedure: updated.procedure,
+        scheduledAt: updated.scheduledAt,
+        surgeryId: updated.id,
+      });
+      void notifyDischarge(updated.patientId, updated.id);
+    }
+
     res.json(updated);
   } catch (e) { next(e); }
 });

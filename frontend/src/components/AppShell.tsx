@@ -7,20 +7,31 @@
 // ======================================================
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
-import { ADMIN_ROLES, ROLE_LABEL, hasAnyRole, type Role } from "../lib/permissions";
+import {
+  ABM_ROLES,
+  ADMIN_ROLES,
+  PATIENT_ROLES,
+  ROLE_LABEL,
+  STAFF_ROLES,
+  hasAnyRole,
+  type Role,
+} from "../lib/permissions";
 
 /** Ítems de navegación; `roles` restringe la visibilidad del ítem. */
-const NAV_ITEMS: { to: string; label: string; roles?: Role[] }[] = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/surgeries", label: "Cirugías" },
-  { to: "/patients", label: "Pacientes" },
-  { to: "/appointments", label: "Turnos" },
+const NAV_ITEMS: { to: string; label: string; roles: Role[] }[] = [
+  { to: "/dashboard", label: "Dashboard", roles: STAFF_ROLES },
+  { to: "/surgeries", label: "Cirugías", roles: STAFF_ROLES },
+  { to: "/patients", label: "Pacientes", roles: STAFF_ROLES },
+  { to: "/appointments", label: "Turnos", roles: STAFF_ROLES },
+  { to: "/emails", label: "Emails", roles: ABM_ROLES },
   { to: "/users", label: "Usuarios", roles: ADMIN_ROLES },
+  // Portal de autogestión (sólo cuentas con rol paciente).
+  { to: "/my-care", label: "Mi seguimiento", roles: PATIENT_ROLES },
 ];
 
 export default function AppShell() {
   const { user, signOut } = useAuth();
-  const visibleNav = NAV_ITEMS.filter((n) => !n.roles || hasAnyRole(user?.roles, n.roles));
+  const visibleNav = NAV_ITEMS.filter((n) => hasAnyRole(user?.roles, n.roles));
 
   return (
     // En pantallas chicas el sidebar pasa arriba (columna); en md+ queda fijo a la izquierda.

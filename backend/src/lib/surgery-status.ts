@@ -28,3 +28,15 @@ export const ALLOWED_TRANSITIONS: Record<SurgeryStatus, SurgeryStatus[]> = {
 export function canTransition(from: SurgeryStatus, to: SurgeryStatus): boolean {
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
+
+/** Etiquetas en español de cada estado (para notificaciones y emails). */
+export const STATUS_LABEL: Record<SurgeryStatus, string> = {
+  programada: "Programada",
+  ingreso: "Ingreso",
+  preoperatorio: "Preoperatorio",
+  en_quirofano: "En quirófano",
+  recuperacion: "Recuperación",
+  postoperatorio: "Postoperatorio",
+  alta: "Alta",
+  cancelada: "Cancelada",
+};

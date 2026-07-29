@@ -116,6 +116,13 @@ Archivo: `backend/.env`
 | `PORT`        | Puerto del servidor backend          | `4000`                                                         |
 | `CORS_ORIGIN` | Origen permitido para CORS           | `http://localhost:3000`                                        |
 | `NODE_ENV`    | Entorno de ejecución                 | `development`                                                  |
+| `RESEND_API_KEY` | API key de Resend (emails). Vacía ⇒ emails auditados como "omitido" | *(vacía)* |
+| `EMAIL_FROM`  | Remitente de los emails              | `SSC <notificaciones@tu-dominio.com>`                          |
+| `FIREBASE_SERVICE_ACCOUNT_BASE64` | Service account de Firebase en base64 (push FCM). Vacía ⇒ push deshabilitado | *(vacía)* |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Alternativa: ruta a un .json local del service account | *(vacía)* |
+
+> El flujo completo de notificaciones (Socket.IO + FCM + Resend) está documentado
+> en [`../docs/NOTIFICACIONES.md`](../docs/NOTIFICACIONES.md).
 
 ---
 

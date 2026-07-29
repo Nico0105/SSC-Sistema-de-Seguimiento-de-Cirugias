@@ -83,3 +83,62 @@ export interface AppUser {
   createdAt: string;
   roles: string[];
 }
+
+/** Ítem del checklist preoperatorio de una cirugía. */
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  order: number;
+  checked: boolean;
+  checkedAt: string | null;
+  checkedByUser: { fullName: string } | null;
+}
+
+/** Control de seguimiento postoperatorio. */
+export interface PostopRecord {
+  id: string;
+  status: string;
+  evolution: string | null;
+  medication: string | null;
+  compliance: boolean;
+  observations: string | null;
+  createdAt: string;
+  createdByUser: { fullName: string } | null;
+  surgery?: { procedure: string; publicCode: string };
+}
+
+/** Reporte de síntomas de un paciente. */
+export interface SymptomReport {
+  id: string;
+  symptoms: string[];
+  painLevel: number;
+  notes: string | null;
+  reportedAt: string;
+  surgery?: { procedure: string } | null;
+}
+
+/** Registro de un email enviado por el sistema (Resend). */
+export interface EmailLog {
+  id: string;
+  to: string;
+  subject: string;
+  type: string;
+  status: string;
+  error: string | null;
+  createdAt: string;
+  surgery: { publicCode: string; procedure: string } | null;
+}
+
+/** Historial clínico consolidado que arma el backend. */
+export interface PatientHistoryData {
+  patient: Patient;
+  surgeries: (Surgery & {
+    history: SurgeryHistoryEntry[];
+    checklistItems: ChecklistItem[];
+    postopRecords: PostopRecord[];
+  })[];
+  symptoms: SymptomReport[];
+  alerts: string[];
+  medication: { procedure: string; medication: string | null }[];
+  emails: EmailLog[];
+}

@@ -70,12 +70,35 @@ router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.sub },
-      include: { roles: true },
+      include: { roles: true, patient: { select: { id: true } } },
     });
     // Si el usuario fue eliminado o desactivado después de emitir el
     // token, la sesión deja de ser válida.
     if (!user || !user.active) return res.status(401).json({ error: "Sesión inválida" });
-    res.json(toPublicUser(user));
+    // patientId permite a los clientes saber si la cuenta es de un paciente.
+    res.json({ ...toPublicUser(user), patientId: user.patient?.id ?? null });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Renovación del token de sesión (usado por la app móvil al abrir).
+ * Requiere un token todavía válido: emite uno nuevo con la expiración
+ * completa y los roles actuales del usuario (por si cambiaron).
+ */
+router.post("/refresh", requireAuth, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.sub },
+      include: { roles: true },
+    });
+    if (!user || !user.active) return res.status(401).json({ error: "Sesión inválida" });
+
+    const token = signToken({
+      sub: user.id,
+      email: user.email,
+      roles: user.roles.map((r) => r.role),
+    });
+    res.json({ token, user: toPublicUser(user) });
   } catch (e) { next(e); }
 });
 

@@ -1,183 +1,129 @@
 // ======================================================
-// SSC Mobile — Seguimiento para familiares (App.tsx)
-// Primera versión de la app móvil: consume el endpoint
-// público del backend (/api/public/board) y muestra el
-// estado de las cirugías del día identificadas por su
-// código público anónimo (sin datos del paciente).
-//
-// El familiar puede filtrar por el código que recibió al
-// ingresar el paciente. La lista se refresca sola cada
-// 30 segundos y manualmente con "tirar para refrescar".
+// SSC Mobile — App principal (App.tsx)
+// Orquesta la sesión y la navegación de la app:
+//   - Sin login: tablero público para familiares + acceso
+//     al login del paciente.
+//   - Con login (rol paciente): pestañas Mis cirugías
+//     (con checklist), Síntomas, Seguimiento y Perfil.
+// La sesión JWT se restaura y RENUEVA al abrir la app
+// (expo-secure-store + POST /api/auth/refresh) y al
+// iniciar sesión se registra el token de push (FCM).
 // ======================================================
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import {
-  FlatList,
-  RefreshControl,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import { auth, type SessionUser } from './src/api';
+import { registerMobilePush, unregisterMobilePush } from './src/push';
+import { base, colors } from './src/theme';
+import LoginScreen from './src/screens/LoginScreen';
+import BoardScreen from './src/screens/BoardScreen';
+import SurgeriesScreen from './src/screens/SurgeriesScreen';
+import SymptomsScreen from './src/screens/SymptomsScreen';
+import PostopScreen from './src/screens/PostopScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
-// URL del backend. En un dispositivo físico debe ser la IP de la
-// máquina que corre el backend (ej.: http://192.168.0.10:4000).
-const API_URL = 'http://localhost:4000';
+/** Pestañas disponibles según haya sesión o no. */
+type Tab = 'board' | 'login' | 'surgeries' | 'symptoms' | 'postop' | 'profile';
 
-/** Frecuencia de refresco automático del tablero. */
-const REFRESH_INTERVAL_MS = 30_000;
+const GUEST_TABS: { key: Tab; label: string }[] = [
+  { key: 'board', label: 'Tablero' },
+  { key: 'login', label: 'Ingresar' },
+];
 
-/** Estados posibles de una cirugía (deben coincidir con el backend). */
-type SurgeryStatus =
-  | 'programada'
-  | 'ingreso'
-  | 'preoperatorio'
-  | 'en_quirofano'
-  | 'recuperacion'
-  | 'postoperatorio'
-  | 'alta'
-  | 'cancelada';
-
-/** Etiqueta en español y color de badge para cada estado. */
-const STATUS_INFO: Record<SurgeryStatus, { label: string; color: string }> = {
-  programada: { label: 'Programada', color: '#64748b' },
-  ingreso: { label: 'Ingreso', color: '#0284c7' },
-  preoperatorio: { label: 'Preoperatorio', color: '#4f46e5' },
-  en_quirofano: { label: 'En quirófano', color: '#d97706' },
-  recuperacion: { label: 'Recuperación', color: '#7c3aed' },
-  postoperatorio: { label: 'Postoperatorio', color: '#059669' },
-  alta: { label: 'Alta', color: '#16a34a' },
-  cancelada: { label: 'Cancelada', color: '#e11d48' },
-};
-
-/** Cirugía anonimizada tal como la expone la API pública. */
-interface BoardItem {
-  id: string;
-  publicCode: string;
-  status: SurgeryStatus;
-  scheduledAt: string;
-  operatingRoom: { code: string; name: string } | null;
-}
+const PATIENT_TABS: { key: Tab; label: string }[] = [
+  { key: 'surgeries', label: 'Cirugías' },
+  { key: 'symptoms', label: 'Síntomas' },
+  { key: 'postop', label: 'Seguimiento' },
+  { key: 'profile', label: 'Perfil' },
+];
 
 export default function App() {
-  const [items, setItems] = useState<BoardItem[]>([]);
-  const [query, setQuery] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [booting, setBooting] = useState(true);
+  const [tab, setTab] = useState<Tab>('board');
 
-  /** Descarga el tablero del día desde la API pública. */
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/public/board`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setItems((await res.json()) as BoardItem[]);
-      setError(null);
-    } catch {
-      setError('No se pudo conectar con el servidor. Reintentando…');
-    }
+  // Restauración (y renovación) de la sesión persistida al abrir la app.
+  useEffect(() => {
+    auth
+      .restore()
+      .then((restored) => {
+        setUser(restored);
+        if (restored) {
+          setTab('surgeries');
+          void registerMobilePush();
+        }
+      })
+      .finally(() => setBooting(false));
   }, []);
 
-  // Carga inicial + refresco automático periódico.
-  useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [load]);
+  /** Login exitoso: registra push y entra al portal del paciente. */
+  function handleLogin(logged: SessionUser) {
+    setUser(logged);
+    setTab('surgeries');
+    void registerMobilePush();
+  }
 
-  /** Gesto "tirar para refrescar" de la lista. */
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, [load]);
+  /** Logout: da de baja el push y borra la sesión del dispositivo. */
+  async function handleSignOut() {
+    await unregisterMobilePush();
+    await auth.signOut();
+    setUser(null);
+    setTab('board');
+  }
 
-  // Filtro por código público (lo que el familiar tiene en mano).
-  const visible = useMemo(() => {
-    const q = query.trim().toUpperCase();
-    if (!q) return items;
-    return items.filter((i) => i.publicCode.toUpperCase().includes(q));
-  }, [items, query]);
+  if (booting) {
+    return (
+      <View style={[base.screen, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={colors.brand} size="large" />
+      </View>
+    );
+  }
+
+  const tabs = user ? PATIENT_TABS : GUEST_TABS;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={base.screen}>
       <StatusBar style="light" />
-      <View style={styles.header}>
-        <Text style={styles.title}>SSC — Seguimiento</Text>
-        <Text style={styles.subtitle}>Estado de cirugías del día</Text>
-        <TextInput
-          style={styles.search}
-          placeholder="Buscar por código (ej. A-123)"
-          placeholderTextColor="#94a3b8"
-          autoCapitalize="characters"
-          value={query}
-          onChangeText={setQuery}
-        />
-        {error && <Text style={styles.error}>{error}</Text>}
+
+      {/* Contenido de la pestaña activa */}
+      <View style={{ flex: 1 }}>
+        {tab === 'board' && <BoardScreen />}
+        {tab === 'login' && <LoginScreen onLogin={handleLogin} />}
+        {tab === 'surgeries' && user && <SurgeriesScreen />}
+        {tab === 'symptoms' && user && <SymptomsScreen />}
+        {tab === 'postop' && user && <PostopScreen />}
+        {tab === 'profile' && user && (
+          <ProfileScreen user={user} onSignOut={() => void handleSignOut()} />
+        )}
       </View>
 
-      <FlatList
-        data={visible}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            {query ? 'No hay cirugías con ese código.' : 'No hay cirugías programadas para hoy.'}
-          </Text>
-        }
-        renderItem={({ item }) => {
-          const info = STATUS_INFO[item.status];
-          return (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.code}>{item.publicCode}</Text>
-                <View style={[styles.badge, { backgroundColor: info.color }]}>
-                  <Text style={styles.badgeText}>{info.label}</Text>
-                </View>
-              </View>
-              <View style={styles.cardFooter}>
-                <Text style={styles.meta}>
-                  Quirófano: {item.operatingRoom?.code ?? '—'}
-                </Text>
-                <Text style={styles.meta}>
-                  Programada:{' '}
-                  {new Date(item.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-            </View>
-          );
+      {/* Barra de pestañas */}
+      <View
+        style={{
+          flexDirection: 'row',
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          backgroundColor: colors.card,
         }}
-      />
+      >
+        {tabs.map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            onPress={() => setTab(t.key)}
+            style={{ flex: 1, paddingVertical: 14, alignItems: 'center' }}
+          >
+            <Text
+              style={{
+                color: tab === t.key ? colors.brand : colors.textMuted,
+                fontWeight: tab === t.key ? '700' : '400',
+                fontSize: 14,
+              }}
+            >
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { padding: 20, paddingBottom: 12 },
-  title: { color: '#fff', fontSize: 26, fontWeight: '700' },
-  subtitle: { color: '#94a3b8', fontSize: 14, marginTop: 2, marginBottom: 12 },
-  search: {
-    backgroundColor: '#1e293b',
-    color: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  error: { color: '#fbbf24', marginTop: 8, fontSize: 13 },
-  list: { padding: 20, paddingTop: 8, gap: 12 },
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 14,
-    padding: 16,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  code: { color: '#fff', fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  badgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  cardFooter: { flexDirection: 'row', gap: 16, marginTop: 12 },
-  meta: { color: '#94a3b8', fontSize: 13 },
-  empty: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15 },
-});

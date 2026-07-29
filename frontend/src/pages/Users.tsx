@@ -21,12 +21,15 @@ interface AppUser {
 }
 
 const ALL_ROLES = Object.keys(ROLE_LABEL) as Role[];
-const EMPTY_FORM = { email: "", password: "", fullName: "", roles: [] as Role[] };
+const EMPTY_FORM = { email: "", password: "", fullName: "", roles: [] as Role[], patientId: "" };
+
+interface PatientOption { id: string; firstName: string; lastName: string; documentId: string }
 
 export default function Users() {
   const { user: me } = useAuth();
 
   const [list, setList] = useState<AppUser[]>([]);
+  const [patients, setPatients] = useState<PatientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -38,7 +41,13 @@ export default function Users() {
   const load = useCallback(async () => {
     try {
       setErr(null);
-      setList(await api.get<AppUser[]>("/api/users"));
+      // Los pacientes se cargan para poder vincular cuentas con rol "paciente".
+      const [users, pats] = await Promise.all([
+        api.get<AppUser[]>("/api/users"),
+        api.get<PatientOption[]>("/api/patients"),
+      ]);
+      setList(users);
+      setPatients(pats);
     } catch (error) {
       setErr(getErrorMessage(error));
     } finally {
@@ -61,7 +70,11 @@ export default function Users() {
     setErr(null);
     setSaving(true);
     try {
-      await api.post("/api/users", form);
+      await api.post("/api/users", {
+        ...form,
+        // El vínculo con un paciente sólo aplica a cuentas con ese rol.
+        patientId: form.roles.includes("paciente") && form.patientId ? form.patientId : null,
+      });
       setForm(EMPTY_FORM);
       setShowForm(false);
       await load();
@@ -138,6 +151,25 @@ export default function Users() {
               ))}
             </div>
           </div>
+          {/* Cuando la cuenta es de un paciente, se elige a cuál se vincula. */}
+          {form.roles.includes("paciente") && (
+            <div className="md:col-span-2">
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600 mb-1 block">Paciente vinculado</span>
+                <select
+                  value={form.patientId}
+                  onChange={(e) => setForm({ ...form, patientId: e.target.value })}
+                  required
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">Seleccionar paciente…</option>
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.id}>{p.lastName}, {p.firstName} · {p.documentId}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           <div className="md:col-span-2"><ErrorAlert message={err} /></div>
           <div className="md:col-span-2">
             <PrimaryButton busy={saving} disabled={form.roles.length === 0}>Crear</PrimaryButton>

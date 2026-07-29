@@ -25,6 +25,14 @@ import surgeryRoutes from "./routes/surgeries.js";
 import roomRoutes from "./routes/operating-rooms.js";
 import appointmentRoutes from "./routes/appointments.js";
 import publicRoutes from "./routes/public.js";
+import checklistRoutes from "./routes/checklists.js";
+import symptomRoutes from "./routes/symptoms.js";
+import postopRoutes from "./routes/postop.js";
+import historyRoutes from "./routes/history.js";
+import meRoutes from "./routes/me.js";
+import fcmTokenRoutes from "./routes/fcm-tokens.js";
+import emailLogRoutes from "./routes/emails.js";
+import { startReminderScheduler } from "./lib/scheduler.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -51,6 +59,16 @@ app.use("/api/surgeries", surgeryRoutes);
 app.use("/api/operating-rooms", roomRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/public", publicRoutes);
+// Módulo de cuidado del paciente (checklist, síntomas, seguimiento, historial).
+// Estas rutas definen sus paths completos internamente (ej. /surgeries/:id/checklist).
+app.use("/api", checklistRoutes);
+app.use("/api", symptomRoutes);
+app.use("/api", postopRoutes);
+app.use("/api", historyRoutes);
+app.use("/api", meRoutes);
+// Notificaciones push y auditoría de emails.
+app.use("/api/fcm-tokens", fcmTokenRoutes);
+app.use("/api/email-logs", emailLogRoutes);
 
 /** 404 explícito para rutas de API inexistentes. */
 app.use("/api", (_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
@@ -67,6 +85,8 @@ io.on("connection", (socket) => {
 // --- Arranque y apagado ordenado --------------------------------
 httpServer.listen(env.port, () => {
   console.log(`SSC backend escuchando en http://localhost:${env.port}`);
+  // Recordatorios automáticos de cirugía (48 h / 24 h) por email + push.
+  startReminderScheduler();
 });
 
 /** Cierra sockets, servidor HTTP y conexiones a la base antes de salir. */

@@ -79,20 +79,23 @@
 
 - **No hay tests automatizados** en ningún proyecto (se recomienda Vitest + Supertest en backend como primer paso).
 - El enum de roles de la base incluye `enfermero` y `familiar` y no incluye `paciente` (mencionado en la documentación). Cambiarlo requiere una migración de PostgreSQL que debe ejecutarse contra la base real (`prisma migrate dev`).
-- La documentación menciona **Pusher** como servicio de tiempo real; el proyecto usa **Socket.io autoalojado**, que cumple el mismo requisito sin depender de credenciales de terceros. La decisión quedó documentada en `backend/src/lib/realtime.ts`.
 - Las versiones del `package.json` de `ssc-mobile` (Expo 54 + React Native 0.76) no son el par oficial del SDK; instala y tipa correctamente, pero conviene alinear con `npx expo install --fix` cuando se trabaje activamente en la app.
 
-## 4. Funcionalidades que faltan según la documentación funcional
+## 4. Funcionalidades que faltaban según la documentación funcional
 
-Pendientes de implementar (no se inventaron a medias para no contradecir la documentación):
+> **Actualización (julio 2026):** todas las funcionalidades listadas abajo fueron
+> implementadas en la segunda etapa del proyecto. Ver `docs/NOTIFICACIONES.md`
+> y los READMEs actualizados. La pila de comunicación quedó definida como:
+> **Socket.IO** (tiempo real), **Firebase Cloud Messaging** (push) y
+> **Resend** (emails). El sistema no usa Pusher.
 
-1. **Checklist preoperatorio** (ítems verificables antes de quirófano).
-2. **Registro de síntomas** del paciente en el postoperatorio.
-3. **Seguimiento postoperatorio detallado** más allá del estado de la cirugía.
-4. **Historial clínico consolidado** por paciente (hoy existe el timeline por cirugía).
-5. **Notificaciones push** a familiares (Firebase Cloud Messaging).
-6. **Rol paciente** con acceso a su propia información.
-7. **App móvil completa** (hoy cubre el seguimiento público para familiares; falta login del staff y gestión).
+1. ✅ **Checklist preoperatorio** configurable, asociado a cada cirugía.
+2. ✅ **Registro de síntomas** del paciente (web y mobile).
+3. ✅ **Seguimiento postoperatorio** con controles diarios e historial cronológico.
+4. ✅ **Historial clínico consolidado** por paciente con alertas automáticas.
+5. ✅ **Notificaciones push** (FCM) y **emails transaccionales** (Resend).
+6. ✅ **Rol paciente** con portal propio (web y mobile), sólo lectura de su información.
+7. ✅ **App móvil** con login JWT persistido, checklist, síntomas, seguimiento y perfil.
 
 ## 5. Posibles mejoras futuras
 

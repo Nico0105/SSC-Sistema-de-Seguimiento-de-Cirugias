@@ -9,16 +9,19 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { STATUS_CHANGE_ROLES, hasAnyRole } from "../lib/permissions";
+import { CLINICAL_ROLES, STATUS_CHANGE_ROLES, hasAnyRole } from "../lib/permissions";
 import { ALLOWED_TRANSITIONS, STATUS_COLOR, STATUS_LABEL, type SurgeryStatus } from "../lib/surgery-status";
 import { useRealtime } from "../hooks/use-realtime";
 import { ErrorAlert, Loading, StatusBadge } from "../components/ui";
+import ChecklistPanel from "../components/ChecklistPanel";
+import PostopPanel from "../components/PostopPanel";
 import type { SurgeryDetail as SurgeryDetailData } from "../lib/types";
 
 export default function SurgeryDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const canChangeStatus = hasAnyRole(user?.roles, STATUS_CHANGE_ROLES);
+  const canCreatePostop = hasAnyRole(user?.roles, CLINICAL_ROLES);
 
   const [surgery, setSurgery] = useState<SurgeryDetailData | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -118,6 +121,16 @@ export default function SurgeryDetail() {
           </p>
         </div>
       )}
+
+      {/* Checklist preoperatorio (editable por el staff) */}
+      <div className="mb-6">
+        <ChecklistPanel surgeryId={surgery.id} canEdit={true} />
+      </div>
+
+      {/* Seguimiento postoperatorio (carga sólo el personal clínico) */}
+      <div className="mb-6">
+        <PostopPanel surgeryId={surgery.id} canCreate={canCreatePostop} />
+      </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6">
         <h2 className="font-semibold text-slate-800 mb-3">Línea de tiempo</h2>

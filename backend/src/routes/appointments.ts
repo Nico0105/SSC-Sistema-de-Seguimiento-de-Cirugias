@@ -8,6 +8,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireStaff, requireAbm } from "../middleware/auth.js";
+import { sendAppointmentConfirmation } from "../lib/email.js";
 
 const router = Router();
 router.use(requireAuth, requireStaff);
@@ -43,6 +44,15 @@ router.post("/", requireAbm, async (req, res, next) => {
       data: { ...data, scheduledAt: new Date(data.scheduledAt) },
       include: { patient: true },
     });
+
+    // Confirmación automática por email al paciente (no bloqueante).
+    void sendAppointmentConfirmation({
+      patientEmail: created.patient.email,
+      patientName: created.patient.firstName,
+      type: created.type,
+      scheduledAt: created.scheduledAt,
+    });
+
     res.status(201).json(created);
   } catch (e) { next(e); }
 });
