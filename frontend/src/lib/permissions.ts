@@ -1,3 +1,10 @@
+// ======================================================
+// Roles y permisos (lib/permissions.ts)
+// Catálogo de roles del sistema y grupos de permisos usados
+// por la UI para mostrar/ocultar acciones. La autorización
+// real siempre la valida el backend; esto es sólo UX.
+// ======================================================
+
 export type Role =
   | "admin"
   | "jefe_quirofano"
@@ -6,6 +13,7 @@ export type Role =
   | "enfermero"
   | "familiar";
 
+/** Etiquetas en español que ve el usuario. */
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "Administrador",
   jefe_quirofano: "Jefe de quirófano",
@@ -15,10 +23,16 @@ export const ROLE_LABEL: Record<Role, string> = {
   familiar: "Familiar",
 };
 
+/** Pueden crear/editar/eliminar pacientes, cirugías, turnos y quirófanos. */
 export const ABM_ROLES: Role[] = ["admin", "jefe_quirofano", "administrativo"];
+
+/** Pueden avanzar el estado de una cirugía durante el proceso. */
 export const STATUS_CHANGE_ROLES: Role[] = ["admin", "jefe_quirofano", "enfermero"];
+
+/** Acceso a la gestión de usuarios. */
 export const ADMIN_ROLES: Role[] = ["admin"];
 
+/** true si el usuario tiene al menos uno de los roles permitidos. */
 export function hasAnyRole(userRoles: string[] | undefined, allowed: Role[]): boolean {
   if (!userRoles) return false;
   return userRoles.some((r) => allowed.includes(r as Role));

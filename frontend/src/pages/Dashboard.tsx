@@ -1,65 +1,66 @@
-import { useEffect, useState } from "react";
-import { api, getSocket } from "../lib/api-client";
-import { STATUS_LABEL, STATUS_COLOR, type SurgeryStatus } from "../lib/surgery-status";
-
-interface Surgery {
-  id: string;
-  publicCode: string;
-  procedure: string;
-  status: SurgeryStatus;
-  scheduledAt: string;
-  patient: { firstName: string; lastName: string };
-  operatingRoom: { code: string; name: string } | null;
-}
+// ======================================================
+// Dashboard (pages/Dashboard.tsx)
+// Resumen operativo del día a día: tarjetas con métricas
+// (total, en quirófano, programadas, altas) y tabla de
+// cirugías. Se refresca automáticamente ante cualquier
+// evento de tiempo real del backend.
+// ======================================================
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { api, getErrorMessage } from "../lib/api-client";
+import { useRealtime, SURGERY_EVENTS } from "../hooks/use-realtime";
+import { EmptyRow, ErrorAlert, Loading, StatusBadge, TableCard } from "../components/ui";
+import type { Surgery } from "../lib/types";
 
 export default function Dashboard() {
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
-  async function load() {
-    const list = await api.get<Surgery[]>("/api/surgeries");
-    setSurgeries(list);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-    const socket = getSocket();
-    const refresh = () => load();
-    socket.on("surgery:update", refresh);
-    socket.on("surgery:created", refresh);
-    socket.on("surgery:deleted", refresh);
-    return () => {
-      socket.off("surgery:update", refresh);
-      socket.off("surgery:created", refresh);
-      socket.off("surgery:deleted", refresh);
-    };
+  const load = useCallback(async () => {
+    try {
+      setErr(null);
+      setSurgeries(await api.get<Surgery[]>("/api/surgeries"));
+    } catch (error) {
+      setErr(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const stats = {
-    total: surgeries.length,
-    enQuirofano: surgeries.filter((s) => s.status === "en_quirofano").length,
-    programadas: surgeries.filter((s) => s.status === "programada").length,
-    alta: surgeries.filter((s) => s.status === "alta").length,
-  };
+  useEffect(() => { void load(); }, [load]);
+  // Recarga ante altas, cambios de estado o bajas de cirugías.
+  useRealtime(SURGERY_EVENTS, load);
+
+  // Las métricas sólo se recalculan cuando cambia la lista.
+  const stats = useMemo(
+    () => ({
+      total: surgeries.length,
+      enQuirofano: surgeries.filter((s) => s.status === "en_quirofano").length,
+      programadas: surgeries.filter((s) => s.status === "programada").length,
+      alta: surgeries.filter((s) => s.status === "alta").length,
+    }),
+    [surgeries],
+  );
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       <h1 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total cirugías" value={stats.total} />
         <StatCard label="En quirófano" value={stats.enQuirofano} highlight />
         <StatCard label="Programadas" value={stats.programadas} />
         <StatCard label="Altas" value={stats.alta} />
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="mb-4"><ErrorAlert message={err} /></div>
+
+      <TableCard>
         <div className="px-6 py-4 border-b border-slate-200">
           <h2 className="font-semibold text-slate-800">Cirugías recientes</h2>
         </div>
         {loading ? (
-          <div className="p-8 text-slate-500">Cargando…</div>
+          <Loading />
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
@@ -78,24 +79,19 @@ export default function Dashboard() {
                   <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
                   <td className="px-6 py-3">{s.procedure}</td>
                   <td className="px-6 py-3">{s.operatingRoom?.code ?? "—"}</td>
-                  <td className="px-6 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[s.status]}`}>
-                      {STATUS_LABEL[s.status]}
-                    </span>
-                  </td>
+                  <td className="px-6 py-3"><StatusBadge status={s.status} /></td>
                 </tr>
               ))}
-              {surgeries.length === 0 && (
-                <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400">Sin cirugías cargadas</td></tr>
-              )}
+              {surgeries.length === 0 && <EmptyRow colSpan={5}>Sin cirugías cargadas</EmptyRow>}
             </tbody>
           </table>
         )}
-      </div>
+      </TableCard>
     </div>
   );
 }
 
+/** Tarjeta de métrica del encabezado del dashboard. */
 function StatCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div className={`rounded-2xl p-5 border ${highlight ? "bg-brand-50 border-brand-100" : "bg-white border-slate-200"}`}>

@@ -1,22 +1,55 @@
+// ======================================================
+// Rutas de autenticación (/api/auth)
+// - POST /login : valida credenciales y emite el JWT.
+// - GET  /me    : devuelve el usuario de la sesión actual
+//                 (usado por el frontend al recargar la página).
+// El login está protegido con rate limiting para frenar
+// ataques de fuerza bruta.
+// ======================================================
 import { Router } from "express";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma.js";
 import { signToken, comparePassword } from "../lib/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-router.post("/login", async (req, res, next) => {
+/** Máximo 10 intentos de login por IP cada 15 minutos. */
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos." },
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+/** Forma pública de un usuario: nunca se expone el hash de contraseña. */
+function toPublicUser(user: { id: string; email: string; fullName: string; roles: { role: string }[] }) {
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    roles: user.roles.map((r) => r.role),
+  };
+}
+
+router.post("/login", loginLimiter, async (req, res, next) => {
   try {
-    const { email, password } = z.object({
-      email: z.string().email(),
-      password: z.string(),
-    }).parse(req.body);
+    const { email, password } = loginSchema.parse(req.body);
 
     const user = await prisma.user.findUnique({
       where: { email },
       include: { roles: true },
     });
+
+    // Mismo mensaje si el email no existe o la contraseña es incorrecta,
+    // para no revelar qué cuentas están registradas.
     if (!user || !(await comparePassword(password, user.passwordHash))) {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
@@ -29,7 +62,7 @@ router.post("/login", async (req, res, next) => {
       email: user.email,
       roles: user.roles.map((r) => r.role),
     });
-    res.json({ token, user: { id: user.id, email: user.email, fullName: user.fullName, roles: user.roles.map(r => r.role) } });
+    res.json({ token, user: toPublicUser(user) });
   } catch (e) { next(e); }
 });
 
@@ -39,8 +72,10 @@ router.get("/me", requireAuth, async (req, res, next) => {
       where: { id: req.user!.sub },
       include: { roles: true },
     });
-    if (!user) return res.status(404).json({ error: "No encontrado" });
-    res.json({ id: user.id, email: user.email, fullName: user.fullName, roles: user.roles.map(r => r.role) });
+    // Si el usuario fue eliminado o desactivado después de emitir el
+    // token, la sesión deja de ser válida.
+    if (!user || !user.active) return res.status(401).json({ error: "Sesión inválida" });
+    res.json(toPublicUser(user));
   } catch (e) { next(e); }
 });
 

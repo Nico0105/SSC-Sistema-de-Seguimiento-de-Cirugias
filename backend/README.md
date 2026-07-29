@@ -97,8 +97,11 @@ Deberías ver la URL local, generalmente `http://localhost:3000`.
 
 | Campo    | Valor             |
 |----------|-------------------|
-| Email    | admin@ssc.com     |
+| Email    | admin@ssc.local   |
 | Password | Admin123!         |
+
+> Estas credenciales las crea `npm run seed`. Cambiá la contraseña del
+> administrador apenas ingreses por primera vez en un entorno real.
 
 ---
 

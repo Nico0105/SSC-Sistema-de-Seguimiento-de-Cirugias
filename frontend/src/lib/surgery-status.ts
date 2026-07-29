@@ -1,3 +1,11 @@
+// ======================================================
+// Estados de cirugía (lib/surgery-status.ts)
+// Catálogo de estados del proceso quirúrgico, sus etiquetas
+// visibles, colores de badge y las transiciones permitidas.
+// Debe mantenerse alineado con el enum SurgeryStatus y la
+// máquina de estados del backend (que es quien valida).
+// ======================================================
+
 export const SURGERY_STATUSES = [
   "programada",
   "ingreso",
@@ -11,6 +19,7 @@ export const SURGERY_STATUSES = [
 
 export type SurgeryStatus = (typeof SURGERY_STATUSES)[number];
 
+/** Etiquetas en español que ve el usuario. */
 export const STATUS_LABEL: Record<SurgeryStatus, string> = {
   programada: "Programada",
   ingreso: "Ingreso",
@@ -22,6 +31,7 @@ export const STATUS_LABEL: Record<SurgeryStatus, string> = {
   cancelada: "Cancelada",
 };
 
+/** Clases Tailwind del badge de cada estado. */
 export const STATUS_COLOR: Record<SurgeryStatus, string> = {
   programada: "bg-slate-100 text-slate-700",
   ingreso: "bg-sky-100 text-sky-700",
@@ -31,4 +41,21 @@ export const STATUS_COLOR: Record<SurgeryStatus, string> = {
   postoperatorio: "bg-emerald-100 text-emerald-700",
   alta: "bg-green-100 text-green-700",
   cancelada: "bg-rose-100 text-rose-700",
+};
+
+/**
+ * Flujo quirúrgico documentado (espejo de la validación del backend):
+ * programada → ingreso → preoperatorio → en_quirofano → recuperacion
+ * → postoperatorio → alta, con cancelación posible hasta entrar a
+ * quirófano. Se usa para ofrecer al usuario sólo los pasos válidos.
+ */
+export const ALLOWED_TRANSITIONS: Record<SurgeryStatus, SurgeryStatus[]> = {
+  programada: ["ingreso", "cancelada"],
+  ingreso: ["preoperatorio", "cancelada"],
+  preoperatorio: ["en_quirofano", "cancelada"],
+  en_quirofano: ["recuperacion"],
+  recuperacion: ["postoperatorio"],
+  postoperatorio: ["alta"],
+  alta: [],
+  cancelada: [],
 };

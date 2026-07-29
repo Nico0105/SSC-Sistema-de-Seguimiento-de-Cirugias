@@ -1,8 +1,21 @@
+// ======================================================
+// Rutas de cirugías (/api/surgeries)
+// Núcleo del sistema: ABM de cirugías, cambio de estado
+// siguiendo la máquina de estados documentada y timeline
+// de cambios (SurgeryStatusHistory).
+//
+// Cada cambio relevante emite un evento por Socket.io con
+// un payload MÍNIMO (sin datos del paciente) porque la
+// pantalla pública de familiares también recibe estos
+// eventos; los clientes internos recargan por REST con JWT.
+// ======================================================
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireStaff, requireAbm, requireSurgeryStatusChange } from "../middleware/auth.js";
 import { emit } from "../lib/realtime.js";
+import { canTransition, ALLOWED_TRANSITIONS } from "../lib/surgery-status.js";
+import { HttpError } from "../middleware/error.js";
 
 const router = Router();
 router.use(requireAuth, requireStaff);
@@ -12,7 +25,10 @@ const STATUSES = [
   "recuperacion", "postoperatorio", "alta", "cancelada",
 ] as const;
 
-// Datos generales de la cirugía (ABM). El estado se cambia aparte, por /:id/status.
+const PRIORITIES = ["baja", "normal", "alta", "urgencia"] as const;
+
+// Datos generales de la cirugía (ABM). El estado NO se edita por acá:
+// se cambia únicamente por PATCH /:id/status para respetar el flujo.
 const surgerySchema = z.object({
   publicCode: z.string().min(1),
   patientId: z.string().uuid(),
@@ -20,18 +36,21 @@ const surgerySchema = z.object({
   procedure: z.string().min(1),
   surgeonName: z.string().optional().nullable(),
   scheduledAt: z.string().datetime(),
-  priority: z.string().optional().nullable(),
+  priority: z.enum(PRIORITIES).optional().nullable(),
   notes: z.string().optional().nullable(),
-  status: z.enum(STATUSES).optional(),
 });
-
-const surgeryEditSchema = surgerySchema.omit({ status: true }).partial();
 
 const statusSchema = z.object({
   status: z.enum(STATUSES),
   note: z.string().optional().nullable(),
 });
 
+/** Payload mínimo y anónimo para los eventos de tiempo real. */
+function toRealtimePayload(s: { id: string; publicCode: string; status: string }) {
+  return { id: s.id, publicCode: s.publicCode, status: s.status };
+}
+
+/** Lista todas las cirugías con paciente y quirófano, por fecha programada. */
 router.get("/", async (_req, res, next) => {
   try {
     const list = await prisma.surgery.findMany({
@@ -42,6 +61,7 @@ router.get("/", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/** Detalle completo de una cirugía, incluido su timeline de estados. */
 router.get("/:id", async (req, res, next) => {
   try {
     const s = await prisma.surgery.findUnique({
@@ -52,11 +72,12 @@ router.get("/:id", async (req, res, next) => {
         history: { orderBy: { createdAt: "desc" } },
       },
     });
-    if (!s) return res.status(404).json({ error: "No encontrada" });
+    if (!s) return res.status(404).json({ error: "Cirugía no encontrada" });
     res.json(s);
   } catch (e) { next(e); }
 });
 
+/** Timeline de cambios de estado de una cirugía. */
 router.get("/:id/history", async (req, res, next) => {
   try {
     const h = await prisma.surgeryStatusHistory.findMany({
@@ -67,6 +88,10 @@ router.get("/:id/history", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/**
+ * Alta de cirugía. Nace siempre en estado "programada" y se registra
+ * la primera entrada del timeline con el usuario que la creó.
+ */
 router.post("/", requireAbm, async (req, res, next) => {
   try {
     const data = surgerySchema.parse(req.body);
@@ -74,21 +99,19 @@ router.post("/", requireAbm, async (req, res, next) => {
       data: {
         ...data,
         scheduledAt: new Date(data.scheduledAt),
-        history: { create: { status: data.status ?? "programada", changedBy: req.user!.sub } },
+        history: { create: { status: "programada", changedBy: req.user!.sub } },
       },
       include: { patient: true, operatingRoom: true },
     });
-    emit("surgery:created", created);
+    emit("surgery:created", toRealtimePayload(created));
     res.status(201).json(created);
   } catch (e) { next(e); }
 });
 
+/** Edición de datos generales (no del estado) de una cirugía. */
 router.patch("/:id", requireAbm, async (req, res, next) => {
   try {
-    const data = surgeryEditSchema.parse(req.body);
-    const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
-    if (!current) return res.status(404).json({ error: "No encontrada" });
-
+    const data = surgerySchema.partial().parse(req.body);
     const updated = await prisma.surgery.update({
       where: { id: req.params.id },
       data: {
@@ -97,35 +120,62 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
       },
       include: { patient: true, operatingRoom: true },
     });
-
-    emit("surgery:update", updated);
+    emit("surgery:update", toRealtimePayload(updated));
     res.json(updated);
   } catch (e) { next(e); }
 });
 
+/**
+ * Cambio de estado de la cirugía.
+ * - Valida la transición contra la máquina de estados documentada.
+ * - Registra automáticamente startedAt (al entrar a quirófano) y
+ *   endedAt (al salir a recuperación).
+ * - Actualiza el estado y escribe el timeline en UNA transacción,
+ *   para que nunca quede un cambio de estado sin historial.
+ */
 router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) => {
   try {
     const data = statusSchema.parse(req.body);
     const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
-    if (!current) return res.status(404).json({ error: "No encontrada" });
+    if (!current) return res.status(404).json({ error: "Cirugía no encontrada" });
 
-    const updated = await prisma.surgery.update({
-      where: { id: req.params.id },
-      data: { status: data.status },
-      include: { patient: true, operatingRoom: true },
-    });
-
-    if (data.status !== current.status) {
-      await prisma.surgeryStatusHistory.create({
-        data: { surgeryId: updated.id, status: data.status, changedBy: req.user!.sub, note: data.note },
-      });
+    if (data.status === current.status) {
+      // Cambio idempotente: no hay nada que hacer.
+      return res.json(current);
+    }
+    if (!canTransition(current.status, data.status)) {
+      const allowed = ALLOWED_TRANSITIONS[current.status];
+      throw new HttpError(
+        409,
+        allowed.length
+          ? `Transición inválida: de "${current.status}" sólo se puede pasar a: ${allowed.join(", ")}`
+          : `La cirugía está en un estado terminal ("${current.status}") y no admite cambios`,
+      );
     }
 
-    emit("surgery:update", updated);
+    const updated = await prisma.$transaction(async (tx) => {
+      const surgery = await tx.surgery.update({
+        where: { id: current.id },
+        data: {
+          status: data.status,
+          // Marca automática de inicio/fin de la intervención.
+          startedAt: data.status === "en_quirofano" ? new Date() : undefined,
+          endedAt: data.status === "recuperacion" ? new Date() : undefined,
+        },
+        include: { patient: true, operatingRoom: true },
+      });
+      await tx.surgeryStatusHistory.create({
+        data: { surgeryId: surgery.id, status: data.status, changedBy: req.user!.sub, note: data.note },
+      });
+      return surgery;
+    });
+
+    emit("surgery:update", toRealtimePayload(updated));
     res.json(updated);
   } catch (e) { next(e); }
 });
 
+/** Baja física de una cirugía (su historial se elimina en cascada). */
 router.delete("/:id", requireAbm, async (req, res, next) => {
   try {
     await prisma.surgery.delete({ where: { id: req.params.id } });

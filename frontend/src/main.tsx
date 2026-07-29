@@ -1,3 +1,10 @@
+// ======================================================
+// Punto de entrada del frontend (main.tsx)
+// Monta la aplicación React con:
+//   - StrictMode (detección temprana de problemas)
+//   - BrowserRouter (navegación SPA)
+//   - AuthProvider (sesión disponible en toda la app)
+// ======================================================
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

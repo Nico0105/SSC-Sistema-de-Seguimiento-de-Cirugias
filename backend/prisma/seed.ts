@@ -1,3 +1,12 @@
+// ======================================================
+// Seed de datos iniciales (prisma/seed.ts)
+// Crea los datos mínimos para poder usar el sistema:
+//   - Usuario administrador (admin@ssc.local / Admin123!)
+//   - Dos quirófanos de ejemplo (Q1 y Q2)
+// Es idempotente: usa upsert, por lo que puede ejecutarse
+// varias veces sin duplicar registros.
+//   Ejecutar con: npm run seed
+// ======================================================
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";

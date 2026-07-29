@@ -1,9 +1,21 @@
+// ======================================================
+// Punto de entrada del backend (server.ts)
+// Levanta el servidor HTTP con:
+//   - Express (API REST bajo /api/*)
+//   - Socket.io (eventos de tiempo real) sobre el mismo puerto
+//   - helmet (headers de seguridad HTTP)
+//   - CORS restringido a los orígenes configurados
+//   - Manejador global de errores y apagado ordenado
+// ======================================================
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { createServer } from "http";
 import { Server as SocketServer } from "socket.io";
 
+import { env } from "./config/env.js";
+import { prisma } from "./lib/prisma.js";
 import { setIo } from "./lib/realtime.js";
 import { errorHandler } from "./middleware/error.js";
 import authRoutes from "./routes/auth.js";
@@ -16,14 +28,20 @@ import publicRoutes from "./routes/public.js";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Socket.io comparte el puerto HTTP; mismo control de orígenes que la API.
 const io = new SocketServer(httpServer, {
-  cors: { origin: process.env.CORS_ORIGIN?.split(",") ?? "*" },
+  cors: { origin: env.corsOrigins },
 });
 setIo(io);
 
-app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? "*" }));
-app.use(express.json());
+// --- Middlewares globales ---------------------------------------
+app.use(helmet());
+app.use(cors({ origin: env.corsOrigins }));
+app.use(express.json({ limit: "1mb" }));
 
+// --- Rutas -------------------------------------------------------
+/** Healthcheck para monitoreo/despliegue. */
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/auth", authRoutes);
@@ -34,14 +52,30 @@ app.use("/api/operating-rooms", roomRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/public", publicRoutes);
 
+/** 404 explícito para rutas de API inexistentes. */
+app.use("/api", (_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
+
+// El manejador de errores SIEMPRE se registra al final.
 app.use(errorHandler);
 
+// --- Tiempo real -------------------------------------------------
 io.on("connection", (socket) => {
   console.log("[socket] cliente conectado", socket.id);
   socket.on("disconnect", () => console.log("[socket] desconectado", socket.id));
 });
 
-const PORT = Number(process.env.PORT ?? 4000);
-httpServer.listen(PORT, () => {
-  console.log(`SSC backend escuchando en http://localhost:${PORT}`);
+// --- Arranque y apagado ordenado --------------------------------
+httpServer.listen(env.port, () => {
+  console.log(`SSC backend escuchando en http://localhost:${env.port}`);
 });
+
+/** Cierra sockets, servidor HTTP y conexiones a la base antes de salir. */
+async function shutdown(signal: string) {
+  console.log(`[server] ${signal} recibido, cerrando…`);
+  io.close();
+  httpServer.close();
+  await prisma.$disconnect();
+  process.exit(0);
+}
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));

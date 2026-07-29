@@ -1,3 +1,11 @@
+// ======================================================
+// Enrutador principal (App.tsx)
+// Define el mapa de rutas de la SPA:
+//   - /auth  → login (pública)
+//   - /board → pantalla para familiares (pública, fullscreen)
+//   - resto  → panel interno, protegido por ProtectedRoute
+//              y envuelto en el layout AppShell (sidebar).
+// ======================================================
 import { Routes, Route, Navigate } from "react-router-dom";
 import AuthPage from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -13,9 +21,11 @@ import ProtectedRoute from "./components/ProtectedRoute";
 export default function App() {
   return (
     <Routes>
+      {/* Rutas públicas */}
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/board" element={<Board />} />
 
+      {/* Panel interno: requiere sesión activa */}
       <Route
         element={
           <ProtectedRoute>
@@ -32,6 +42,7 @@ export default function App() {
         <Route path="/users" element={<Users />} />
       </Route>
 
+      {/* Cualquier ruta desconocida vuelve al inicio */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
