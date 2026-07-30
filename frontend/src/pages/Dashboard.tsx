@@ -1,35 +1,48 @@
 // ======================================================
 // Dashboard (pages/Dashboard.tsx)
-// Resumen operativo del día a día: tarjetas con métricas
-// (total, en quirófano, programadas, altas) y tabla de
-// cirugías. Se refresca automáticamente ante cualquier
-// evento de tiempo real del backend.
+// Resumen operativo del día a día: KPIs con ícono y color
+// semántico, y la tabla completa con buscador/paginación
+// (DataTable). Se refresca solo ante cambios en tiempo real
+// (useSurgeriesQuery invalida la caché ante eventos del socket).
 // ======================================================
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, getErrorMessage } from "../lib/api-client";
-import { useRealtime, SURGERY_EVENTS } from "../hooks/use-realtime";
-import { EmptyRow, ErrorAlert, Loading, StatusBadge, TableCard } from "../components/ui";
+import { useMemo } from "react";
+import { CalendarClock, CheckCircle2, ClipboardList, DoorOpen } from "lucide-react";
+import { useSurgeriesQuery } from "../hooks/use-surgeries-query";
+import { ErrorAlert, StatusBadge } from "../components/ui";
+import { Card } from "../components/ui/card";
+import { DataTable } from "../components/ui/data-table";
+import { getErrorMessage } from "../lib/api-client";
+import { STATUS_LABEL } from "../lib/surgery-status";
 import type { Surgery } from "../lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
+
+const columns: ColumnDef<Surgery, any>[] = [
+  {
+    accessorKey: "publicCode",
+    header: "Código",
+    cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() as string}</span>,
+  },
+  {
+    id: "patient",
+    accessorFn: (s) => `${s.patient.lastName}, ${s.patient.firstName}`,
+    header: "Paciente",
+  },
+  { accessorKey: "procedure", header: "Procedimiento" },
+  {
+    id: "operatingRoom",
+    accessorFn: (s) => s.operatingRoom?.code ?? "—",
+    header: "Quirófano",
+  },
+  {
+    id: "status",
+    accessorFn: (s) => STATUS_LABEL[s.status],
+    header: "Estado",
+    cell: (ctx) => <StatusBadge status={ctx.row.original.status} />,
+  },
+];
 
 export default function Dashboard() {
-  const [surgeries, setSurgeries] = useState<Surgery[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setErr(null);
-      setSurgeries(await api.get<Surgery[]>("/api/surgeries"));
-    } catch (error) {
-      setErr(getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-  // Recarga ante altas, cambios de estado o bajas de cirugías.
-  useRealtime(SURGERY_EVENTS, load);
+  const { data: surgeries = [], isLoading, error } = useSurgeriesQuery();
 
   // Las métricas sólo se recalculan cuando cambia la lista.
   const stats = useMemo(
@@ -44,59 +57,64 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 md:p-8">
-      <h1 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
+      <h1 className="text-2xl font-bold text-slate-800 mb-1">Dashboard</h1>
+      <p className="text-sm text-slate-500 mb-6">Resumen operativo de cirugías en curso.</p>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total cirugías" value={stats.total} />
-        <StatCard label="En quirófano" value={stats.enQuirofano} highlight />
-        <StatCard label="Programadas" value={stats.programadas} />
-        <StatCard label="Altas" value={stats.alta} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <KpiCard icon={ClipboardList} label="Total cirugías" value={stats.total} variant="brand" />
+        <KpiCard icon={DoorOpen} label="En quirófano" value={stats.enQuirofano} variant="warning" />
+        <KpiCard icon={CalendarClock} label="Programadas" value={stats.programadas} variant="info" />
+        <KpiCard icon={CheckCircle2} label="Altas" value={stats.alta} variant="success" />
       </div>
 
-      <div className="mb-4"><ErrorAlert message={err} /></div>
-
-      <TableCard>
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="font-semibold text-slate-800">Cirugías recientes</h2>
+      {error && (
+        <div className="mb-6">
+          <ErrorAlert message={getErrorMessage(error)} />
         </div>
-        {loading ? (
-          <Loading />
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="text-left px-6 py-3">Código</th>
-                <th className="text-left px-6 py-3">Paciente</th>
-                <th className="text-left px-6 py-3">Procedimiento</th>
-                <th className="text-left px-6 py-3">Quirófano</th>
-                <th className="text-left px-6 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {surgeries.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-6 py-3 font-mono text-xs">{s.publicCode}</td>
-                  <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
-                  <td className="px-6 py-3">{s.procedure}</td>
-                  <td className="px-6 py-3">{s.operatingRoom?.code ?? "—"}</td>
-                  <td className="px-6 py-3"><StatusBadge status={s.status} /></td>
-                </tr>
-              ))}
-              {surgeries.length === 0 && <EmptyRow colSpan={5}>Sin cirugías cargadas</EmptyRow>}
-            </tbody>
-          </table>
-        )}
-      </TableCard>
+      )}
+
+      <Card>
+        <div className="px-6 pt-4">
+          <h2 className="font-semibold text-slate-800">Cirugías</h2>
+        </div>
+        <DataTable
+          columns={columns}
+          data={surgeries}
+          isLoading={isLoading}
+          searchPlaceholder="Buscar por código, paciente o procedimiento…"
+          emptyMessage="Sin cirugías cargadas"
+        />
+      </Card>
     </div>
   );
 }
 
-/** Tarjeta de métrica del encabezado del dashboard. */
-function StatCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+/** Tarjeta de métrica del encabezado del dashboard, con ícono y color semántico. */
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  variant,
+}: {
+  icon: typeof ClipboardList;
+  label: string;
+  value: number;
+  variant: "brand" | "warning" | "info" | "success";
+}) {
+  const styles = {
+    brand: { bg: "bg-brand-50", icon: "text-brand-600", value: "text-brand-700" },
+    warning: { bg: "bg-warning-50", icon: "text-warning-600", value: "text-warning-700" },
+    info: { bg: "bg-info-50", icon: "text-info-600", value: "text-info-700" },
+    success: { bg: "bg-success-50", icon: "text-success-600", value: "text-success-700" },
+  }[variant];
+
   return (
-    <div className={`rounded-2xl p-5 border ${highlight ? "bg-brand-50 border-brand-100" : "bg-white border-slate-200"}`}>
+    <Card className="p-5">
+      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${styles.bg} mb-3`}>
+        <Icon className={`h-4.5 w-4.5 ${styles.icon}`} />
+      </div>
       <div className="text-xs text-slate-500 mb-1">{label}</div>
-      <div className={`text-3xl font-bold ${highlight ? "text-brand-700" : "text-slate-800"}`}>{value}</div>
-    </div>
+      <div className={`text-3xl font-bold ${styles.value}`}>{value}</div>
+    </Card>
   );
 }

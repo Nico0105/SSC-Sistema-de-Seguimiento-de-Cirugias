@@ -99,11 +99,28 @@ export const auth = {
     setToken(data.token);
     return data.user;
   },
-  /** Restaura la sesión a partir del token guardado (o null si no hay). */
+  /**
+   * Restaura la sesión a partir del token guardado (o null si no hay).
+   *
+   * Antes de usarlo, RENUEVA el token contra /api/auth/refresh: el JWT
+   * guardado lleva los roles "congelados" desde el momento del login (el
+   * backend valida permisos decodificando el token, no consultando la
+   * base en cada request), así que si un admin cambió tus roles después
+   * de que iniciaste sesión, seguirías operando con permisos viejos hasta
+   * volver a loguearte. Renovar acá evita ese desfasaje sin pedirle al
+   * usuario que cierre sesión manualmente (mismo patrón que ya usa la
+   * app móvil en `auth.restore()`).
+   */
   async me() {
     if (!getToken()) return null;
-    try { return await api.get<User>("/api/auth/me"); }
-    catch { setToken(null); return null; }
+    try {
+      const refreshed = await api.post<{ token: string; user: User }>("/api/auth/refresh");
+      setToken(refreshed.token);
+      return await api.get<User>("/api/auth/me");
+    } catch {
+      setToken(null);
+      return null;
+    }
   },
   /** Cierra la sesión localmente. */
   signOut() { setToken(null); },

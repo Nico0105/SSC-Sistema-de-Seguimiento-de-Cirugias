@@ -22,7 +22,7 @@ import AppShell from "./components/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 import { useAuth } from "./lib/auth-context";
-import { hasAnyRole, PATIENT_ROLES, STAFF_ROLES } from "./lib/permissions";
+import { ABM_ROLES, ADMIN_ROLES, hasAnyRole, PATIENT_ROLES, STAFF_ROLES } from "./lib/permissions";
 
 /** Redirige la raíz según el rol: paciente → portal, staff → dashboard. */
 function HomeRedirect() {
@@ -57,8 +57,11 @@ export default function App() {
         <Route path="/surgeries" element={<RoleRoute roles={STAFF_ROLES}><Surgeries /></RoleRoute>} />
         <Route path="/surgeries/:id" element={<RoleRoute roles={STAFF_ROLES}><SurgeryDetail /></RoleRoute>} />
         <Route path="/appointments" element={<RoleRoute roles={STAFF_ROLES}><Appointments /></RoleRoute>} />
-        <Route path="/users" element={<RoleRoute roles={STAFF_ROLES}><Users /></RoleRoute>} />
-        <Route path="/emails" element={<RoleRoute roles={STAFF_ROLES}><EmailLogs /></RoleRoute>} />
+        {/* Bug corregido: estas dos guardias usaban STAFF_ROLES (cualquier interno),
+            dejando entrar a médicos/enfermeros a pantallas que el backend restringe
+            a admin (/users) y a admin/jefa/administrativo (/emails). */}
+        <Route path="/users" element={<RoleRoute roles={ADMIN_ROLES}><Users /></RoleRoute>} />
+        <Route path="/emails" element={<RoleRoute roles={ABM_ROLES}><EmailLogs /></RoleRoute>} />
 
         {/* Portal del paciente */}
         <Route path="/my-care" element={<RoleRoute roles={PATIENT_ROLES}><MyCare /></RoleRoute>} />
