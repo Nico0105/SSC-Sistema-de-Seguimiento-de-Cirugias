@@ -25,22 +25,41 @@ Monorepo con tres proyectos independientes:
 
 ### 1. Pre-requisitos
 - Node.js 20+
-- PostgreSQL 15+ instalado localmente
+- PostgreSQL 15+ (instalado localmente, **o** Docker Desktop — ver opción B abajo)
 - VSCode (recomendado)
 
-### 2. Levantar el backend
+### 2. Base de datos
+Elegí una opción:
+
+**Opción A — Docker (la más rápida, no requiere instalar PostgreSQL):**
+```bash
+docker run -d --name ssc-postgres \
+  -e POSTGRES_USER=ssc_user \
+  -e POSTGRES_PASSWORD=ssc_pass_segura \
+  -e POSTGRES_DB=ssc_db \
+  -p 5432:5432 \
+  postgres:16-alpine
+```
+Con esto el `DATABASE_URL` por defecto de `backend/.env.example` ya funciona sin editar nada.
+El contenedor persiste los datos mientras no se borre (`docker rm ssc-postgres`); para
+volver a arrancarlo en otra sesión alcanza con `docker start ssc-postgres`.
+
+**Opción B — PostgreSQL instalado localmente:** ver el paso 2 de
+[`backend/README.md`](backend/README.md) (creación manual de usuario y base con `psql`).
+
+### 3. Levantar el backend
 Ver instrucciones completas en [`backend/README.md`](backend/README.md).
 
 ```bash
 cd backend
 npm install
-cp .env.example .env       # editar DATABASE_URL y JWT_SECRET
-npx prisma migrate dev --name init
+cp .env.example .env       # con la Opción A no hace falta editar nada
+npx prisma migrate deploy  # aplica las migraciones ya versionadas del repo
 npm run seed               # crea admin demo: admin@ssc.local / Admin123!
 npm run dev                # http://localhost:4000
 ```
 
-### 3. Levantar el frontend (en otra terminal)
+### 4. Levantar el frontend (en otra terminal)
 Ver instrucciones completas en [`frontend/README.md`](frontend/README.md).
 
 ```bash
@@ -50,13 +69,13 @@ cp .env.example .env
 npm run dev                # http://localhost:3000
 ```
 
-### 4. Probar
+### 5. Probar
 1. Abrí `http://localhost:3000/auth` y entrá con `admin@ssc.local` / `Admin123!`
 2. Cargá un paciente en `/patients`
 3. Creá una cirugía en `/surgeries`
 4. Abrí `/board` en otra ventana → avanzá el estado de la cirugía desde el detalle y verás la actualización en tiempo real.
 
-### 5. App móvil (opcional)
+### 6. App móvil (opcional)
 ```bash
 cd ssc-mobile
 npm install
