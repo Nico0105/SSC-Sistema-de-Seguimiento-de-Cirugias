@@ -1,106 +1,122 @@
-import { useEffect, useState } from "react";
-import { api, getSocket } from "../lib/api-client";
-import { STATUS_LABEL, STATUS_COLOR, type SurgeryStatus } from "../lib/surgery-status";
+// ======================================================
+// Dashboard (pages/Dashboard.tsx)
+// Resumen operativo del día a día: KPIs con ícono y color
+// semántico, y la tabla completa con buscador/paginación
+// (DataTable). Se refresca solo ante cambios en tiempo real
+// (useSurgeriesQuery invalida la caché ante eventos del socket).
+// ======================================================
+import { useMemo } from "react";
+import { CalendarClock, CheckCircle2, ClipboardList, DoorOpen } from "lucide-react";
+import { useSurgeriesQuery } from "../hooks/use-surgeries-query";
+import { ErrorAlert, StatusBadge } from "../components/ui";
+import { Card } from "../components/ui/card";
+import { DataTable } from "../components/ui/data-table";
+import { getErrorMessage } from "../lib/api-client";
+import { STATUS_LABEL } from "../lib/surgery-status";
+import type { Surgery } from "../lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
 
-interface Surgery {
-  id: string;
-  publicCode: string;
-  procedure: string;
-  status: SurgeryStatus;
-  scheduledAt: string;
-  patient: { firstName: string; lastName: string };
-  operatingRoom: { code: string; name: string } | null;
-}
+const columns: ColumnDef<Surgery, any>[] = [
+  {
+    accessorKey: "publicCode",
+    header: "Código",
+    cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() as string}</span>,
+  },
+  {
+    id: "patient",
+    accessorFn: (s) => `${s.patient.lastName}, ${s.patient.firstName}`,
+    header: "Paciente",
+  },
+  { accessorKey: "procedure", header: "Procedimiento" },
+  {
+    id: "operatingRoom",
+    accessorFn: (s) => s.operatingRoom?.code ?? "—",
+    header: "Quirófano",
+  },
+  {
+    id: "status",
+    accessorFn: (s) => STATUS_LABEL[s.status],
+    header: "Estado",
+    cell: (ctx) => (
+      <StatusBadge status={ctx.row.original.status} waitingRoom={ctx.row.original.waitingRoom} />
+    ),
+  },
+];
 
 export default function Dashboard() {
-  const [surgeries, setSurgeries] = useState<Surgery[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: surgeries = [], isLoading, error } = useSurgeriesQuery();
 
-  async function load() {
-    const list = await api.get<Surgery[]>("/api/surgeries");
-    setSurgeries(list);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-    const socket = getSocket();
-    const refresh = () => load();
-    socket.on("surgery:update", refresh);
-    socket.on("surgery:created", refresh);
-    socket.on("surgery:deleted", refresh);
-    return () => {
-      socket.off("surgery:update", refresh);
-      socket.off("surgery:created", refresh);
-      socket.off("surgery:deleted", refresh);
-    };
-  }, []);
-
-  const stats = {
-    total: surgeries.length,
-    enQuirofano: surgeries.filter((s) => s.status === "en_quirofano").length,
-    programadas: surgeries.filter((s) => s.status === "programada").length,
-    alta: surgeries.filter((s) => s.status === "alta").length,
-  };
+  // Las métricas sólo se recalculan cuando cambia la lista.
+  const stats = useMemo(
+    () => ({
+      total: surgeries.length,
+      enQuirofano: surgeries.filter((s) => s.status === "en_quirofano").length,
+      programadas: surgeries.filter((s) => s.status === "programada").length,
+      alta: surgeries.filter((s) => s.status === "alta").length,
+    }),
+    [surgeries],
+  );
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
+    <div className="p-4 md:p-8">
+      <h1 className="text-2xl font-bold text-slate-800 mb-1">Dashboard</h1>
+      <p className="text-sm text-slate-500 mb-6">Resumen operativo de cirugías en curso.</p>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total cirugías" value={stats.total} />
-        <StatCard label="En quirófano" value={stats.enQuirofano} highlight />
-        <StatCard label="Programadas" value={stats.programadas} />
-        <StatCard label="Altas" value={stats.alta} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <KpiCard icon={ClipboardList} label="Total cirugías" value={stats.total} variant="brand" />
+        <KpiCard icon={DoorOpen} label="En quirófano" value={stats.enQuirofano} variant="warning" />
+        <KpiCard icon={CalendarClock} label="Programadas" value={stats.programadas} variant="info" />
+        <KpiCard icon={CheckCircle2} label="Altas" value={stats.alta} variant="success" />
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="font-semibold text-slate-800">Cirugías recientes</h2>
+      {error && (
+        <div className="mb-6">
+          <ErrorAlert message={getErrorMessage(error)} />
         </div>
-        {loading ? (
-          <div className="p-8 text-slate-500">Cargando…</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="text-left px-6 py-3">Código</th>
-                <th className="text-left px-6 py-3">Paciente</th>
-                <th className="text-left px-6 py-3">Procedimiento</th>
-                <th className="text-left px-6 py-3">Quirófano</th>
-                <th className="text-left px-6 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {surgeries.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-6 py-3 font-mono text-xs">{s.publicCode}</td>
-                  <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
-                  <td className="px-6 py-3">{s.procedure}</td>
-                  <td className="px-6 py-3">{s.operatingRoom?.code ?? "—"}</td>
-                  <td className="px-6 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[s.status]}`}>
-                      {STATUS_LABEL[s.status]}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {surgeries.length === 0 && (
-                <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400">Sin cirugías cargadas</td></tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+      )}
+
+      <Card>
+        <div className="px-6 pt-4">
+          <h2 className="font-semibold text-slate-800">Cirugías</h2>
+        </div>
+        <DataTable
+          columns={columns}
+          data={surgeries}
+          isLoading={isLoading}
+          searchPlaceholder="Buscar por código, paciente o procedimiento…"
+          emptyMessage="Sin cirugías cargadas"
+        />
+      </Card>
     </div>
   );
 }
 
-function StatCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+/** Tarjeta de métrica del encabezado del dashboard, con ícono y color semántico. */
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  variant,
+}: {
+  icon: typeof ClipboardList;
+  label: string;
+  value: number;
+  variant: "brand" | "warning" | "info" | "success";
+}) {
+  const styles = {
+    brand: { bg: "bg-brand-50", icon: "text-brand-600", value: "text-brand-700" },
+    warning: { bg: "bg-warning-50", icon: "text-warning-600", value: "text-warning-700" },
+    info: { bg: "bg-info-50", icon: "text-info-600", value: "text-info-700" },
+    success: { bg: "bg-success-50", icon: "text-success-600", value: "text-success-700" },
+  }[variant];
+
   return (
-    <div className={`rounded-2xl p-5 border ${highlight ? "bg-brand-50 border-brand-100" : "bg-white border-slate-200"}`}>
+    <Card className="p-5">
+      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${styles.bg} mb-3`}>
+        <Icon className={`h-4.5 w-4.5 ${styles.icon}`} />
+      </div>
       <div className="text-xs text-slate-500 mb-1">{label}</div>
-      <div className={`text-3xl font-bold ${highlight ? "text-brand-700" : "text-slate-800"}`}>{value}</div>
-    </div>
+      <div className={`text-3xl font-bold ${styles.value}`}>{value}</div>
+    </Card>
   );
 }

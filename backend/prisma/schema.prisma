@@ -1,3 +1,12 @@
+// ======================================================
+// Schema de Prisma — modelo de datos del SSC
+// Núcleo: usuarios con roles, pacientes, quirófanos,
+// cirugías con timeline de estados y turnos.
+// Módulo de cuidado del paciente: checklist preoperatorio,
+// registro de síntomas y seguimiento postoperatorio.
+// Notificaciones: tokens FCM (push) y log de emails (Resend).
+// ======================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,6 +16,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Roles del sistema. "paciente" es el rol de autogestión: sólo ve su
+/// propia información (vía el vínculo User ↔ Patient) y registra síntomas.
 enum AppRole {
   admin
   jefe_quirofano
@@ -14,29 +25,35 @@ enum AppRole {
   administrativo
   enfermero
   familiar
+  paciente
 }
 
+/// Flujo: programada → en_quirofano → esperando_en_sala → postoperatorio → alta
+/// (cancelada sólo desde programada).
 enum SurgeryStatus {
   programada
-  ingreso
-  preoperatorio
   en_quirofano
-  recuperacion
+  esperando_en_sala
   postoperatorio
   alta
   cancelada
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String
-  fullName     String
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  roles        UserRole[]
+  id            String                 @id @default(uuid())
+  email         String                 @unique
+  passwordHash  String
+  fullName      String
+  active        Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  roles         UserRole[]
   statusChanges SurgeryStatusHistory[]
+  /// Paciente vinculado cuando el usuario tiene rol "paciente".
+  patient        Patient?
+  checklistChecks SurgeryChecklistItem[] @relation("ChecklistCheckedBy")
+  postopRecords  PostopRecord[]         @relation("PostopCreatedBy")
+  fcmTokens      FcmToken[]
 }
 
 model UserRole {
@@ -61,11 +78,15 @@ model Patient {
   bloodType    String?
   allergies    String?
   notes        String?
+  /// Cuenta de acceso del paciente (rol "paciente"), si se le creó una.
+  userId       String?    @unique
   deletedAt    DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  user         User?      @relation(fields: [userId], references: [id])
   surgeries    Surgery[]
   appointments Appointment[]
+  symptomReports SymptomReport[]
 
   @@index([lastName, firstName])
 }
@@ -92,6 +113,9 @@ model Surgery {
   startedAt       DateTime?
   endedAt         DateTime?
   status          SurgeryStatus  @default(programada)
+  /// Número de sala donde espera el paciente tras salir de quirófano
+  /// (se informa en la pantalla de familiares).
+  waitingRoom     String?
   priority        String?        // baja | normal | alta | urgencia
   notes           String?
   createdAt       DateTime       @default(now())
@@ -100,6 +124,10 @@ model Surgery {
   patient         Patient        @relation(fields: [patientId], references: [id])
   operatingRoom   OperatingRoom? @relation(fields: [operatingRoomId], references: [id])
   history         SurgeryStatusHistory[]
+  checklistItems  SurgeryChecklistItem[]
+  symptomReports  SymptomReport[]
+  postopRecords   PostopRecord[]
+  emailLogs       EmailLog[]
 
   @@index([scheduledAt])
   @@index([status])
@@ -132,4 +160,122 @@ model Appointment {
   patient     Patient  @relation(fields: [patientId], references: [id])
 
   @@index([scheduledAt])
+}
+
+// ------------------------------------------------------
+// Checklist preoperatorio
+// ------------------------------------------------------
+
+/// Ítems configurables del checklist (los define admin/jefa de quirófano).
+/// Al abrir por primera vez el checklist de una cirugía, los ítems activos
+/// se copian como SurgeryChecklistItem (snapshot: cambios posteriores de la
+/// plantilla no alteran checklists ya generados).
+model ChecklistTemplate {
+  id        String   @id @default(uuid())
+  label     String
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Ítem del checklist de UNA cirugía concreta, con quién y cuándo lo marcó.
+model SurgeryChecklistItem {
+  id        String    @id @default(uuid())
+  surgeryId String
+  label     String
+  order     Int       @default(0)
+  checked   Boolean   @default(false)
+  checkedAt DateTime?
+  checkedBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  surgery       Surgery @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+  checkedByUser User?   @relation("ChecklistCheckedBy", fields: [checkedBy], references: [id])
+
+  @@index([surgeryId])
+}
+
+// ------------------------------------------------------
+// Registro de síntomas (postoperatorio)
+// ------------------------------------------------------
+
+/// Reporte diario de síntomas cargado por el paciente (o por el staff en
+/// su nombre). `symptoms` guarda la lista marcada (dolor, fiebre, etc.).
+model SymptomReport {
+  id         String   @id @default(uuid())
+  patientId  String
+  surgeryId  String?
+  symptoms   String[]
+  painLevel  Int      // escala 0–10
+  notes      String?
+  reportedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  patient Patient  @relation(fields: [patientId], references: [id])
+  surgery Surgery? @relation(fields: [surgeryId], references: [id])
+
+  @@index([patientId, reportedAt])
+}
+
+// ------------------------------------------------------
+// Seguimiento postoperatorio
+// ------------------------------------------------------
+
+/// Control diario del equipo médico sobre una cirugía: estado del
+/// paciente, evolución, medicación indicada y cumplimiento.
+model PostopRecord {
+  id           String   @id @default(uuid())
+  surgeryId    String
+  status       String   // estable | mejorando | con_complicaciones | alta
+  evolution    String?
+  medication   String?
+  compliance   Boolean  @default(true) // cumplimiento de indicaciones
+  observations String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  surgery       Surgery @relation(fields: [surgeryId], references: [id], onDelete: Cascade)
+  createdByUser User?   @relation("PostopCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([surgeryId, createdAt])
+}
+
+// ------------------------------------------------------
+// Notificaciones
+// ------------------------------------------------------
+
+/// Token de Firebase Cloud Messaging de un dispositivo del usuario.
+/// Un usuario puede tener varios (web + celular). Los tokens inválidos
+/// se eliminan automáticamente al fallar un envío.
+model FcmToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String?  // web | android | ios
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Registro de cada email enviado (o fallido/omitido) vía Resend.
+/// Sirve de auditoría y para no duplicar recordatorios 48h/24h.
+model EmailLog {
+  id        String   @id @default(uuid())
+  to        String
+  subject   String
+  type      String   // confirmacion_cirugia | reprogramacion | recordatorio_48h | ...
+  status    String   // enviado | fallido | omitido
+  error     String?
+  surgeryId String?
+  createdAt DateTime @default(now())
+
+  surgery Surgery? @relation(fields: [surgeryId], references: [id], onDelete: SetNull)
+
+  @@index([surgeryId])
+  @@index([type, surgeryId])
 }

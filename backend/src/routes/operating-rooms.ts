@@ -1,3 +1,8 @@
+// ======================================================
+// Rutas de quirófanos (/api/operating-rooms)
+// ABM simple de quirófanos (código único, nombre, piso).
+// Lectura: cualquier rol interno. Escritura: roles ABM.
+// ======================================================
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
@@ -13,12 +18,14 @@ const schema = z.object({
   active: z.boolean().optional(),
 });
 
+/** Lista los quirófanos ordenados por código. */
 router.get("/", async (_req, res, next) => {
   try {
     res.json(await prisma.operatingRoom.findMany({ orderBy: { code: "asc" } }));
   } catch (e) { next(e); }
 });
 
+/** Alta de quirófano (código único: 409 si se repite). */
 router.post("/", requireAbm, async (req, res, next) => {
   try {
     const data = schema.parse(req.body);
@@ -26,6 +33,7 @@ router.post("/", requireAbm, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/** Edición parcial de un quirófano. */
 router.patch("/:id", requireAbm, async (req, res, next) => {
   try {
     const data = schema.partial().parse(req.body);
@@ -33,6 +41,11 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/**
+ * Baja de quirófano. Si tiene cirugías asociadas, la clave foránea
+ * lo impide y el error handler responde 409 (usar `active: false`
+ * para retirarlo de servicio sin perder historial).
+ */
 router.delete("/:id", requireAbm, async (req, res, next) => {
   try {
     await prisma.operatingRoom.delete({ where: { id: req.params.id } });
