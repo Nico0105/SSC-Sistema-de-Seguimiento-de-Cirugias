@@ -20,7 +20,9 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireStaff, requireChecklistAdmin } from "../middleware/auth.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+// Este router se monta en /api: los middlewares se acotan a sus prefijos
+// para no interceptar requests de otros routers (ej. /api/me del paciente).
+router.use(["/checklist-templates", "/checklist-items", "/surgeries"], requireAuth, requireStaff);
 
 const templateSchema = z.object({
   label: z.string().min(1),

@@ -72,7 +72,7 @@ export default function Board() {
                 <div className="text-xs text-slate-400 uppercase tracking-wide">Código</div>
                 <div className="text-4xl font-mono font-bold">{s.publicCode}</div>
               </div>
-              <StatusBadge status={s.status} size="lg" />
+              <StatusBadge status={s.status} waitingRoom={s.waitingRoom} size="lg" />
             </div>
             <div className="mt-6 flex items-center gap-6 text-slate-300">
               <div>

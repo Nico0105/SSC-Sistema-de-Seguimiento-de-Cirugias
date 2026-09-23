@@ -21,6 +21,7 @@ export interface OwnSurgery {
   procedure: string;
   status: string;
   scheduledAt: string;
+  waitingRoom: string | null;
   operatingRoom: { code: string; name: string } | null;
   history: { id: string; status: string; createdAt: string }[];
 }
@@ -57,6 +58,7 @@ export interface BoardItem {
   publicCode: string;
   status: string;
   scheduledAt: string;
+  waitingRoom: string | null;
   operatingRoom: { code: string; name: string } | null;
 }
 

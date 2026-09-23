@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { api, getErrorMessage } from '../api';
-import { base, colors, STATUS_INFO } from '../theme';
+import { base, colors, statusInfo } from '../theme';
 import type { ChecklistItem, OwnSurgery } from '../types';
 
 export default function SurgeriesScreen() {
@@ -64,7 +64,7 @@ export default function SurgeriesScreen() {
       {surgeries.length === 0 && <Text style={base.empty}>No tenés cirugías registradas.</Text>}
 
       {surgeries.map((s) => {
-        const info = STATUS_INFO[s.status] ?? { label: s.status, color: colors.textFaint };
+        const info = statusInfo(s.status, s.waitingRoom);
         const items = checklists[s.id];
         const isOpen = expanded === s.id;
         return (

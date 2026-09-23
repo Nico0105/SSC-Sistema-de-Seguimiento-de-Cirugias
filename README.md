@@ -118,12 +118,14 @@ npm start                  # Expo; escanear el QR con Expo Go
 El backend valida cada transición (no se pueden saltear ni revertir etapas):
 
 ```
-programada → ingreso → preoperatorio → en_quirofano → recuperacion → postoperatorio → alta
-     │           │            │
-     └───────────┴────────────┴──► cancelada   (hasta entrar a quirófano)
+programada → en_quirofano → esperando_en_sala (N) → postoperatorio → alta
+     │
+     └──► cancelada   (sólo mientras está programada)
 ```
 
-Al entrar a quirófano se registra `startedAt`; al pasar a recuperación, `endedAt`.
+Al entrar a quirófano se registra `startedAt`. Al salir, el paso a
+"Esperando en sala" **exige el número de sala** (`waitingRoom`), se registra
+`endedAt` y la pantalla de familiares muestra "Esperando en sala N".
 
 ## Roles y permisos
 

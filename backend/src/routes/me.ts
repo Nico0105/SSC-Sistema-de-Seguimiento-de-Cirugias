@@ -23,7 +23,8 @@ import { symptomSchema } from "./symptoms.js";
 import { buildPatientHistory } from "./history.js";
 
 const router = Router();
-router.use(requireAuth, requirePatient);
+// Montado en /api: middleware acotado a /me (ver checklists.ts).
+router.use("/me", requireAuth, requirePatient);
 
 /**
  * Resuelve el paciente vinculado a la cuenta autenticada.

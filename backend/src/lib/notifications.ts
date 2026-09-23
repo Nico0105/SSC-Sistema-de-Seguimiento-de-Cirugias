@@ -11,7 +11,7 @@
 // ======================================================
 import { prisma } from "./prisma.js";
 import { sendPushToUser } from "./fcm.js";
-import { STATUS_LABEL } from "./surgery-status.js";
+import { statusText } from "./surgery-status.js";
 import type { SurgeryStatus } from "@prisma/client";
 
 /** Envía una push al usuario vinculado a un paciente (si tiene cuenta). */
@@ -39,11 +39,12 @@ export function notifySurgeryStatusChange(
   surgeryId: string,
   procedure: string,
   status: SurgeryStatus,
+  waitingRoom?: string | null,
 ) {
   return notifyPatient(
     patientId,
     "Actualización de tu cirugía",
-    `${procedure}: ${STATUS_LABEL[status]}`,
+    `${procedure}: ${statusText(status, waitingRoom)}`,
     { surgeryId, type: "surgery_status" },
   );
 }

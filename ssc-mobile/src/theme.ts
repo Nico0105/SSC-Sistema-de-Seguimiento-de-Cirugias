@@ -21,14 +21,21 @@ export const colors = {
 /** Etiqueta y color de cada estado de cirugía (espejo del backend). */
 export const STATUS_INFO: Record<string, { label: string; color: string }> = {
   programada: { label: 'Programada', color: '#64748b' },
-  ingreso: { label: 'Ingreso', color: '#0284c7' },
-  preoperatorio: { label: 'Preoperatorio', color: '#4f46e5' },
   en_quirofano: { label: 'En quirófano', color: '#d97706' },
-  recuperacion: { label: 'Recuperación', color: '#7c3aed' },
+  esperando_en_sala: { label: 'Esperando en sala', color: '#7c3aed' },
   postoperatorio: { label: 'Postoperatorio', color: '#059669' },
   alta: { label: 'Alta', color: '#16a34a' },
   cancelada: { label: 'Cancelada', color: '#e11d48' },
 };
+
+/** Estado visible con el número de sala: "Esperando en sala 3". */
+export function statusInfo(status: string, waitingRoom?: string | null) {
+  const info = STATUS_INFO[status] ?? { label: status, color: colors.textFaint };
+  if (status === 'esperando_en_sala' && waitingRoom) {
+    return { ...info, label: `${info.label} ${waitingRoom}` };
+  }
+  return info;
+}
 
 /** Estilos base reutilizados por todas las pantallas. */
 export const base = StyleSheet.create({

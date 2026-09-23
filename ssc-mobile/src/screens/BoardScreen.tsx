@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, Text, TextInput, View } from 'react-native';
 import { api } from '../api';
-import { base, colors, STATUS_INFO } from '../theme';
+import { base, colors, statusInfo } from '../theme';
 import type { BoardItem } from '../types';
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -75,7 +75,7 @@ export default function BoardScreen() {
           </Text>
         }
         renderItem={({ item }) => {
-          const info = STATUS_INFO[item.status] ?? { label: item.status, color: colors.textFaint };
+          const info = statusInfo(item.status, item.waitingRoom);
           return (
             <View style={base.card}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

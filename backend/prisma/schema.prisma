@@ -28,12 +28,12 @@ enum AppRole {
   paciente
 }
 
+/// Flujo: programada → en_quirofano → esperando_en_sala → postoperatorio → alta
+/// (cancelada sólo desde programada).
 enum SurgeryStatus {
   programada
-  ingreso
-  preoperatorio
   en_quirofano
-  recuperacion
+  esperando_en_sala
   postoperatorio
   alta
   cancelada
@@ -113,6 +113,9 @@ model Surgery {
   startedAt       DateTime?
   endedAt         DateTime?
   status          SurgeryStatus  @default(programada)
+  /// Número de sala donde espera el paciente tras salir de quirófano
+  /// (se informa en la pantalla de familiares).
+  waitingRoom     String?
   priority        String?        // baja | normal | alta | urgencia
   notes           String?
   createdAt       DateTime       @default(now())

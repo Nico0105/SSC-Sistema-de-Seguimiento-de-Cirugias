@@ -27,7 +27,7 @@ async function processReminders(hours: 48 | 24): Promise<void> {
 
   const upcoming = await prisma.surgery.findMany({
     where: {
-      status: { in: ["programada", "ingreso", "preoperatorio"] },
+      status: "programada",
       scheduledAt: { gte: now, lte: until },
     },
     include: { patient: true },

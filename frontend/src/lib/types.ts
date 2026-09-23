@@ -37,6 +37,8 @@ export interface Surgery {
   scheduledAt: string;
   startedAt: string | null;
   endedAt: string | null;
+  /** Sala donde espera el paciente al salir de quirófano. */
+  waitingRoom: string | null;
   priority: string | null;
   notes: string | null;
   patient: Patient;
@@ -72,6 +74,7 @@ export interface BoardItem {
   scheduledAt: string;
   startedAt: string | null;
   endedAt: string | null;
+  waitingRoom: string | null;
   operatingRoom: { code: string; name: string } | null;
 }
 

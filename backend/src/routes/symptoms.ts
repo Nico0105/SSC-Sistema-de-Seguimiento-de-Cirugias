@@ -11,7 +11,8 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireStaff } from "../middleware/auth.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+// Montado en /api: middleware acotado a su prefijo (ver checklists.ts).
+router.use("/patients", requireAuth, requireStaff);
 
 /** Catálogo de síntomas ofrecidos por la documentación funcional. */
 export const SYMPTOMS = [

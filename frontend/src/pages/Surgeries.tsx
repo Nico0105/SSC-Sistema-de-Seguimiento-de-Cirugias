@@ -135,7 +135,7 @@ export default function Surgeries() {
                   <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
                   <td className="px-6 py-3">{s.procedure}</td>
                   <td className="px-6 py-3 text-slate-500">{new Date(s.scheduledAt).toLocaleString()}</td>
-                  <td className="px-6 py-3"><StatusBadge status={s.status} /></td>
+                  <td className="px-6 py-3"><StatusBadge status={s.status} waitingRoom={s.waitingRoom} /></td>
                   <td className="px-6 py-3 text-right">
                     <Link to={`/surgeries/${s.id}`} className="text-brand-600 text-xs hover:underline">Ver →</Link>
                   </td>

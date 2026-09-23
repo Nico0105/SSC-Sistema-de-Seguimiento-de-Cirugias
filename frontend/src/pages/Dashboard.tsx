@@ -37,7 +37,9 @@ const columns: ColumnDef<Surgery, any>[] = [
     id: "status",
     accessorFn: (s) => STATUS_LABEL[s.status],
     header: "Estado",
-    cell: (ctx) => <StatusBadge status={ctx.row.original.status} />,
+    cell: (ctx) => (
+      <StatusBadge status={ctx.row.original.status} waitingRoom={ctx.row.original.waitingRoom} />
+    ),
   },
 ];
 

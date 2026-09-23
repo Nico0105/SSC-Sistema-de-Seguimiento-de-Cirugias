@@ -28,8 +28,7 @@ const router = Router();
 router.use(requireAuth, requireStaff);
 
 const STATUSES = [
-  "programada", "ingreso", "preoperatorio", "en_quirofano",
-  "recuperacion", "postoperatorio", "alta", "cancelada",
+  "programada", "en_quirofano", "esperando_en_sala", "postoperatorio", "alta", "cancelada",
 ] as const;
 
 const PRIORITIES = ["baja", "normal", "alta", "urgencia"] as const;
@@ -47,10 +46,17 @@ const surgerySchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-const statusSchema = z.object({
-  status: z.enum(STATUSES),
-  note: z.string().optional().nullable(),
-});
+const statusSchema = z
+  .object({
+    status: z.enum(STATUSES),
+    note: z.string().optional().nullable(),
+    /** Número de sala: obligatorio al pasar a "esperando_en_sala". */
+    waitingRoom: z.string().trim().min(1).max(20).optional().nullable(),
+  })
+  .refine((d) => d.status !== "esperando_en_sala" || !!d.waitingRoom, {
+    message: "Indicá el número de sala donde espera el paciente",
+    path: ["waitingRoom"],
+  });
 
 /** Payload mínimo y anónimo para los eventos de tiempo real. */
 function toRealtimePayload(s: { id: string; publicCode: string; status: string }) {
@@ -164,7 +170,8 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
  * Cambio de estado de la cirugía.
  * - Valida la transición contra la máquina de estados documentada.
  * - Registra automáticamente startedAt (al entrar a quirófano) y
- *   endedAt (al salir a recuperación).
+ *   endedAt (al salir de quirófano a la sala de espera).
+ * - Guarda el número de sala al pasar a "esperando_en_sala".
  * - Actualiza el estado y escribe el timeline en UNA transacción,
  *   para que nunca quede un cambio de estado sin historial.
  */
@@ -195,12 +202,16 @@ router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) =
           status: data.status,
           // Marca automática de inicio/fin de la intervención.
           startedAt: data.status === "en_quirofano" ? new Date() : undefined,
-          endedAt: data.status === "recuperacion" ? new Date() : undefined,
+          endedAt: data.status === "esperando_en_sala" ? new Date() : undefined,
+          waitingRoom: data.status === "esperando_en_sala" ? data.waitingRoom : undefined,
         },
         include: { patient: true, operatingRoom: true },
       });
+      // El número de sala queda también en el timeline (si no hay otra nota).
+      const note =
+        data.note ?? (data.status === "esperando_en_sala" ? `Sala ${data.waitingRoom}` : null);
       await tx.surgeryStatusHistory.create({
-        data: { surgeryId: surgery.id, status: data.status, changedBy: req.user!.sub, note: data.note },
+        data: { surgeryId: surgery.id, status: data.status, changedBy: req.user!.sub, note },
       });
       return surgery;
     });
@@ -208,7 +219,9 @@ router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) =
     emit("surgery:update", toRealtimePayload(updated));
 
     // Notificación push al paciente por el cambio de estado.
-    void notifySurgeryStatusChange(updated.patientId, updated.id, updated.procedure, updated.status);
+    void notifySurgeryStatusChange(
+      updated.patientId, updated.id, updated.procedure, updated.status, updated.waitingRoom,
+    );
 
     // El alta médica además dispara email + push dedicados.
     if (data.status === "alta") {

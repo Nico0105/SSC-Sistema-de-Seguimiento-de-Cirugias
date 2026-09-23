@@ -107,7 +107,7 @@ export default function MyCare() {
           <div key={s.id} className="bg-white border border-slate-200 rounded-2xl p-5">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
               <div className="font-medium text-slate-800">{s.procedure}</div>
-              <StatusBadge status={s.status} />
+              <StatusBadge status={s.status} waitingRoom={s.waitingRoom} />
             </div>
             <div className="text-xs text-slate-500 mb-4">
               Programada: {new Date(s.scheduledAt).toLocaleString()}

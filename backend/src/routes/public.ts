@@ -35,6 +35,8 @@ router.get("/board", async (_req, res, next) => {
         scheduledAt: true,
         startedAt: true,
         endedAt: true,
+        // Sala de espera post-quirófano: dato operativo, no identifica al paciente.
+        waitingRoom: true,
         operatingRoom: { select: { code: true, name: true } },
       },
     });

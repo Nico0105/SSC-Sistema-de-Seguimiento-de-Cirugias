@@ -89,7 +89,7 @@ export default function PatientHistory() {
                     </Link>
                     <span className="text-xs text-slate-400 font-mono ml-2">{s.publicCode}</span>
                   </div>
-                  <StatusBadge status={s.status} />
+                  <StatusBadge status={s.status} waitingRoom={s.waitingRoom} />
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
                   Programada: {new Date(s.scheduledAt).toLocaleString()}

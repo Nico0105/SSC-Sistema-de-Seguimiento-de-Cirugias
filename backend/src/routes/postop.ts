@@ -13,7 +13,8 @@ import { requireAuth, requireStaff, requireClinical } from "../middleware/auth.j
 import { notifyNewPostopRecord } from "../lib/notifications.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+// Montado en /api: middleware acotado a su prefijo (ver checklists.ts).
+router.use("/surgeries", requireAuth, requireStaff);
 
 /** Estados posibles de un control postoperatorio. */
 export const POSTOP_STATUSES = ["estable", "mejorando", "con_complicaciones", "alta"] as const;

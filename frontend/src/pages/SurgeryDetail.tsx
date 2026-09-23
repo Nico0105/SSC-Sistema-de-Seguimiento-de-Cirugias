@@ -26,6 +26,8 @@ export default function SurgeryDetail() {
   const [surgery, setSurgery] = useState<SurgeryDetailData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
+  /** Número de sala a informar al pasar a "esperando_en_sala". */
+  const [room, setRoom] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -42,10 +44,19 @@ export default function SurgeryDetail() {
 
   /** Avanza la cirugía al estado indicado (validado también por el backend). */
   async function changeStatus(status: SurgeryStatus) {
+    const needsRoom = status === "esperando_en_sala";
+    if (needsRoom && !room.trim()) {
+      setErr("Indicá el número de sala donde espera el paciente");
+      return;
+    }
     setErr(null);
     setChanging(true);
     try {
-      await api.patch(`/api/surgeries/${id}/status`, { status });
+      await api.patch(`/api/surgeries/${id}/status`, {
+        status,
+        waitingRoom: needsRoom ? room.trim() : undefined,
+      });
+      setRoom("");
       await load();
     } catch (error) {
       setErr(getErrorMessage(error));
@@ -73,7 +84,7 @@ export default function SurgeryDetail() {
           <h1 className="text-2xl font-bold text-slate-800">{surgery.procedure}</h1>
           <div className="text-sm text-slate-500 font-mono">{surgery.publicCode}</div>
         </div>
-        <StatusBadge status={surgery.status} size="lg" />
+        <StatusBadge status={surgery.status} waitingRoom={surgery.waitingRoom} size="lg" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -104,7 +115,20 @@ export default function SurgeryDetail() {
       {canChangeStatus && nextStatuses.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
           <h2 className="font-semibold text-slate-800 mb-3">Avanzar estado</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Al salir de quirófano hay que indicar la sala de espera. */}
+            {nextStatuses.includes("esperando_en_sala") && (
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                N° de sala
+                <input
+                  value={room}
+                  onChange={(e) => setRoom(e.target.value)}
+                  maxLength={20}
+                  placeholder="Ej. 3"
+                  className="w-20 border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                />
+              </label>
+            )}
             {nextStatuses.map((st) => (
               <button
                 key={st}
