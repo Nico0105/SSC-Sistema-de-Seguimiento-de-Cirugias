@@ -47,7 +47,7 @@ export default function AppShell() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-lg font-bold text-brand-700">SSC</span>
+          <span className="text-lg font-bold text-brand-700">MediQ's</span>
         </header>
 
         <AnimatePresence>

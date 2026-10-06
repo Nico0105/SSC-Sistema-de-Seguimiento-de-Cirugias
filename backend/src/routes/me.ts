@@ -11,20 +11,22 @@
 //   GET  /me/postop                 → sus controles/indicaciones
 //   GET  /me/symptoms               → sus reportes de síntomas
 //   POST /me/symptoms               → registrar síntomas del día
+//   GET  /me/messages               → mensajes que le dejó su médico
 //   GET  /me/history                → su historial consolidado
 // ======================================================
 import { Router } from "express";
 import type { Request } from "express";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requirePatient } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import { getOrCreateChecklist } from "./checklists.js";
 import { symptomSchema } from "./symptoms.js";
 import { buildPatientHistory } from "./history.js";
+import { MESSAGE_INCLUDE } from "./messages.js";
 
 const router = Router();
 // Montado en /api: middleware acotado a /me (ver checklists.ts).
-router.use("/me", requireAuth, requirePatient);
+router.use("/me", requireAuth, requirePermission("portal:paciente"));
 
 /**
  * Resuelve el paciente vinculado a la cuenta autenticada.
@@ -127,6 +129,19 @@ router.post("/me/symptoms", async (req, res, next) => {
       },
     });
     res.status(201).json(created);
+  } catch (e) { next(e); }
+});
+
+/** Mensajes que le dejó su médico, del más reciente al más viejo. */
+router.get("/me/messages", async (req, res, next) => {
+  try {
+    const patient = await getOwnPatient(req);
+    const list = await prisma.patientMessage.findMany({
+      where: { patientId: patient.id },
+      orderBy: { createdAt: "desc" },
+      include: MESSAGE_INCLUDE,
+    });
+    res.json(list);
   } catch (e) { next(e); }
 });
 

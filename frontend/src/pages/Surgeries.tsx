@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
+import { can } from "../lib/permissions";
 import { useRealtime, SURGERY_EVENTS } from "../hooks/use-realtime";
 import { EmptyRow, ErrorAlert, Input, Loading, PrimaryButton, Select, StatusBadge, TableCard } from "../components/ui";
 import type { OperatingRoom, Patient, Surgery } from "../lib/types";
@@ -24,7 +24,7 @@ const EMPTY_FORM = {
 
 export default function Surgeries() {
   const { user } = useAuth();
-  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
+  const canEdit = can(user?.roles, "cirugias:escribir");
 
   const [list, setList] = useState<Surgery[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);

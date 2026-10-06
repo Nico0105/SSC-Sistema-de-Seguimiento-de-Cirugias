@@ -9,12 +9,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireClinical } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { notifyNewPostopRecord } from "../lib/notifications.js";
 
 const router = Router();
 // Montado en /api: middleware acotado a su prefijo (ver checklists.ts).
-router.use("/surgeries", requireAuth, requireStaff);
+router.use("/surgeries", requireAuth, requirePermission("clinica:ver"));
 
 /** Estados posibles de un control postoperatorio. */
 export const POSTOP_STATUSES = ["estable", "mejorando", "con_complicaciones", "alta"] as const;
@@ -40,7 +40,7 @@ router.get("/surgeries/:id/postop", async (req, res, next) => {
 });
 
 /** Alta de un control diario (sólo personal clínico). */
-router.post("/surgeries/:id/postop", requireClinical, async (req, res, next) => {
+router.post("/surgeries/:id/postop", requirePermission("postop:escribir"), async (req, res, next) => {
   try {
     const data = recordSchema.parse(req.body);
     const surgery = await prisma.surgery.findUnique({ where: { id: req.params.id } });

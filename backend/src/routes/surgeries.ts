@@ -12,10 +12,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireAbm, requireSurgeryStatusChange } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { emit } from "../lib/realtime.js";
 import { canTransition, ALLOWED_TRANSITIONS } from "../lib/surgery-status.js";
 import { HttpError } from "../middleware/error.js";
+import { getOrCreateChecklist } from "./checklists.js";
 import {
   sendSurgeryConfirmation,
   sendPreopInstructions,
@@ -25,7 +26,7 @@ import {
 import { notifySurgeryStatusChange, notifyDischarge } from "../lib/notifications.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+router.use(requireAuth, requirePermission("panel:ver"));
 
 const STATUSES = [
   "programada", "en_quirofano", "esperando_en_sala", "postoperatorio", "alta", "cancelada",
@@ -105,7 +106,7 @@ router.get("/:id/history", async (req, res, next) => {
  * Alta de cirugía. Nace siempre en estado "programada" y se registra
  * la primera entrada del timeline con el usuario que la creó.
  */
-router.post("/", requireAbm, async (req, res, next) => {
+router.post("/", requirePermission("cirugias:escribir"), async (req, res, next) => {
   try {
     const data = surgerySchema.parse(req.body);
     const created = await prisma.surgery.create({
@@ -135,7 +136,7 @@ router.post("/", requireAbm, async (req, res, next) => {
 });
 
 /** Edición de datos generales (no del estado) de una cirugía. */
-router.patch("/:id", requireAbm, async (req, res, next) => {
+router.patch("/:id", requirePermission("cirugias:escribir"), async (req, res, next) => {
   try {
     const data = surgerySchema.partial().parse(req.body);
     const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
@@ -169,13 +170,15 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
 /**
  * Cambio de estado de la cirugía.
  * - Valida la transición contra la máquina de estados documentada.
+ * - Exige el checklist preoperatorio completo para cualquier avance
+ *   (cancelar está siempre permitido mientras la cirugía esté programada).
  * - Registra automáticamente startedAt (al entrar a quirófano) y
  *   endedAt (al salir de quirófano a la sala de espera).
  * - Guarda el número de sala al pasar a "esperando_en_sala".
  * - Actualiza el estado y escribe el timeline en UNA transacción,
  *   para que nunca quede un cambio de estado sin historial.
  */
-router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) => {
+router.patch("/:id/status", requirePermission("cirugias:cambiar_estado"), async (req, res, next) => {
   try {
     const data = statusSchema.parse(req.body);
     const current = await prisma.surgery.findUnique({ where: { id: req.params.id } });
@@ -193,6 +196,21 @@ router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) =
           ? `Transición inválida: de "${current.status}" sólo se puede pasar a: ${allowed.join(", ")}`
           : `La cirugía está en un estado terminal ("${current.status}") y no admite cambios`,
       );
+    }
+
+    // Ningún avance del proceso (salvo cancelar) con el checklist incompleto.
+    // Se valida en cada paso, no sólo al entrar a quirófano, para que
+    // desmarcar un ítem después también frene el flujo.
+    if (data.status !== "cancelada") {
+      const pending = (await getOrCreateChecklist(current.id)).filter((item) => !item.checked);
+      if (pending.length > 0) {
+        throw new HttpError(
+          409,
+          `No se puede avanzar: falta completar el checklist preoperatorio (${pending
+            .map((item) => item.label)
+            .join(", ")})`,
+        );
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -240,7 +258,7 @@ router.patch("/:id/status", requireSurgeryStatusChange, async (req, res, next) =
 });
 
 /** Baja física de una cirugía (su historial se elimina en cascada). */
-router.delete("/:id", requireAbm, async (req, res, next) => {
+router.delete("/:id", requirePermission("cirugias:escribir"), async (req, res, next) => {
   try {
     await prisma.surgery.delete({ where: { id: req.params.id } });
     emit("surgery:deleted", { id: req.params.id });

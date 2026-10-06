@@ -1,6 +1,6 @@
 // ======================================================
 // Toasts (lib/toast.ts)
-// Wrapper fino sobre sonner con el estilo del SSC. Se usa en
+// Wrapper fino sobre sonner con el estilo de MediQ's. Se usa en
 // las mutaciones (crear/editar/eliminar) para dar feedback
 // inmediato sin ocupar espacio de layout — a diferencia de
 // ErrorAlert, que se reserva para errores de VALIDACIÓN

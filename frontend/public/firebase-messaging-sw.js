@@ -1,6 +1,6 @@
 // ======================================================
 // Service worker de Firebase Cloud Messaging
-// Recibe las notificaciones push cuando la pestaña del SSC
+// Recibe las notificaciones push cuando la pestaña de MediQ's
 // está cerrada o en segundo plano. Usa los scripts "compat"
 // de Google (los service workers no soportan módulos ES en
 // todos los navegadores). Debe vivir en la raíz pública del
@@ -26,7 +26,7 @@ const messaging = firebase.messaging();
 
 // Notificación del sistema cuando llega un push en segundo plano.
 messaging.onBackgroundMessage((payload) => {
-  const title = (payload.notification && payload.notification.title) || "SSC";
+  const title = (payload.notification && payload.notification.title) || "MediQ's";
   const body = (payload.notification && payload.notification.body) || "";
   self.registration.showNotification(title, { body });
 });

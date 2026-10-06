@@ -1,4 +1,4 @@
-# SSC — Sistema de Seguimiento de Cirugías Especializadas
+# MediQ's — Backend
 
 Sistema hospitalario para el seguimiento y gestión de cirugías, con panel web administrativo y app móvil.
 
@@ -124,13 +124,11 @@ Deberías ver la URL local, generalmente `http://localhost:3000`.
 
 ## Credenciales de acceso por defecto
 
-| Campo    | Valor             |
-|----------|-------------------|
-| Email    | admin@ssc.local   |
-| Password | Admin123!         |
+`npm run seed` crea un usuario por rol. Administrador: `admin@mediqus.local` / `Admin123!`.
+La tabla completa (rol, email, contraseña y qué puede hacer cada uno) está en
+[`../CREDENCIALES.md`](../CREDENCIALES.md).
 
-> Estas credenciales las crea `npm run seed`. Cambiá la contraseña del
-> administrador apenas ingreses por primera vez en un entorno real.
+> Son credenciales de demo: en un entorno real no corras el seed o cambiá las contraseñas.
 
 ---
 
@@ -145,12 +143,13 @@ Archivo: `backend/.env`
 | `PORT`        | Puerto del servidor backend          | `4000`                                                         |
 | `CORS_ORIGIN` | Origen permitido para CORS           | `http://localhost:3000`                                        |
 | `NODE_ENV`    | Entorno de ejecución                 | `development`                                                  |
-| `RESEND_API_KEY` | API key de Resend (emails). Vacía ⇒ emails auditados como "omitido" | *(vacía)* |
-| `EMAIL_FROM`  | Remitente de los emails              | `SSC <notificaciones@tu-dominio.com>`                          |
+| `BREVO_API_KEY` | API key de Brevo (brevo.com → SMTP & API → API Keys). Vacía ⇒ emails auditados como "omitido" | *(vacía)* |
+| `EMAIL_FROM_ADDRESS` | Email remitente, verificado en Brevo (no requiere dominio propio) | *(vacía)* |
+| `EMAIL_FROM_NAME` | Nombre del remitente | `MediQ's` |
 | `FIREBASE_SERVICE_ACCOUNT_BASE64` | Service account de Firebase en base64 (push FCM). Vacía ⇒ push deshabilitado | *(vacía)* |
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | Alternativa: ruta a un .json local del service account | *(vacía)* |
 
-> El flujo completo de notificaciones (Socket.IO + FCM + Resend) está documentado
+> El flujo completo de notificaciones (Socket.IO + FCM + Brevo) está documentado
 > en [`../docs/NOTIFICACIONES.md`](../docs/NOTIFICACIONES.md).
 
 ---

@@ -42,7 +42,7 @@ export async function registerMobilePush(): Promise<void> {
     if (Platform.OS === 'android') {
       // Canal por defecto requerido por Android 8+.
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'Notificaciones SSC',
+        name: "Notificaciones MediQ's",
         importance: Notifications.AndroidImportance.HIGH,
       });
     }

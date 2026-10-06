@@ -42,7 +42,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) 
       style={[base.screen, { justifyContent: 'center', padding: 24 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={[base.title, { fontSize: 32 }]}>SSC</Text>
+      <Text style={[base.title, { fontSize: 32 }]}>MediQ's</Text>
       <Text style={[base.subtitle, { marginBottom: 24 }]}>
         Iniciá sesión para ver tu seguimiento
       </Text>

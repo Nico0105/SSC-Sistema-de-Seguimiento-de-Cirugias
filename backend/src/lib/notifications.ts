@@ -4,7 +4,7 @@
 // paciente. Resuelve el usuario vinculado al paciente y
 // combina los dos canales:
 //   - Push (Firebase Cloud Messaging) → lib/fcm.ts
-//   - Email (Resend)                  → lib/email.ts
+//   - Email (Brevo)                  → lib/email.ts
 // Todas las funciones son "fire and forget": nunca lanzan,
 // para que un fallo de notificación no rompa la operación
 // de negocio que la originó.
@@ -50,6 +50,15 @@ export function notifySurgeryStatusChange(
 }
 
 /** Push cuando el equipo médico carga un nuevo control postoperatorio. */
+export function notifyDoctorMessage(patientId: string, authorName: string) {
+  return notifyPatient(
+    patientId,
+    `Nuevo mensaje de ${authorName}`,
+    "Tu médico te dejó un mensaje. Miralo en Mi seguimiento.",
+    { type: "doctor_message" },
+  );
+}
+
 export function notifyNewPostopRecord(patientId: string, surgeryId: string) {
   return notifyPatient(
     patientId,

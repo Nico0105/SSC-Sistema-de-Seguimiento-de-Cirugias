@@ -120,7 +120,17 @@ export interface SymptomReport {
   surgery?: { procedure: string } | null;
 }
 
-/** Registro de un email enviado por el sistema (Resend). */
+/** Mensaje del médico a un paciente (hilo individual por paciente). */
+export interface PatientMessage {
+  id: string;
+  body: string;
+  /** Resultado del envío por email: enviado | fallido | omitido. */
+  emailStatus: string | null;
+  createdAt: string;
+  author: { fullName: string } | null;
+}
+
+/** Registro de un email enviado por el sistema (Brevo). */
 export interface EmailLog {
   id: string;
   to: string;

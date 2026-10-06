@@ -11,15 +11,15 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { hashPassword } from "../lib/auth.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 
 const router = Router();
-router.use(requireAuth, requireAdmin);
+router.use(requireAuth, requirePermission("usuarios:gestionar"));
 
 /** Roles válidos del sistema (deben coincidir con el enum AppRole de Prisma). */
 const ROLES = [
-  "admin", "jefe_quirofano", "medico", "administrativo", "enfermero", "familiar", "paciente",
+  "admin", "jefe_quirofano", "medico", "enfermero", "recepcionista", "administrativo", "paciente",
 ] as const;
 
 const createSchema = z.object({

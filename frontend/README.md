@@ -39,13 +39,13 @@ VITE_API_URL=http://localhost:4000
 | `/patients`              | Staff           | CRUD de pacientes                                    |
 | `/patients/:id/history`  | Staff           | Historial clínico consolidado con alertas            |
 | `/appointments`          | Staff           | Turnos                                               |
-| `/emails`                | Roles ABM       | Auditoría de emails enviados (Resend)                |
+| `/emails`                | Roles ABM       | Auditoría de emails enviados (Brevo)                |
 | `/users`                 | Admin           | Gestión de usuarios y vínculo cuenta ↔ paciente      |
 | `/my-care`               | Rol paciente    | Portal del paciente: cirugías, checklist, síntomas   |
 | `/board`                 | Público         | Pantalla fullscreen para familiares                  |
 
 ## Flujo de uso
-1. Iniciar el backend (`cd ../backend && npm run dev`) y correr `npm run seed` (crea el admin `admin@ssc.local` / `Admin123!` y dos quirófanos).
+1. Iniciar el backend (`cd ../backend && npm run dev`) y correr `npm run seed` (crea un usuario por rol, ver [`../CREDENCIALES.md`](../CREDENCIALES.md), y dos quirófanos).
 2. Iniciar el frontend (`npm run dev`).
 3. Ir a `/auth` e iniciar sesión con el admin del seed (no existe registro público: las cuentas las crea el administrador en `/users`).
 4. Cargar pacientes en `/patients`.

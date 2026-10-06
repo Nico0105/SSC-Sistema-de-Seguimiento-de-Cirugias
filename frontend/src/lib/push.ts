@@ -65,7 +65,7 @@ export async function registerWebPush(): Promise<void> {
     // Con la pestaña en primer plano, FCM no muestra la notificación
     // del sistema: se muestra manualmente.
     onMessage(messaging, (payload) => {
-      const title = payload.notification?.title ?? "SSC";
+      const title = payload.notification?.title ?? "MediQ's";
       const body = payload.notification?.body ?? "";
       new Notification(title, { body });
     });

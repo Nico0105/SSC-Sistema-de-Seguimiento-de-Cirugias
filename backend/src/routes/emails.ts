@@ -1,15 +1,15 @@
 // ======================================================
 // Rutas de auditoría de emails (/api/email-logs)
 // Listado de los correos enviados/fallidos/omitidos por el
-// sistema (Resend), para control administrativo.
+// sistema (Brevo), para control administrativo.
 // Acceso: roles ABM (admin, jefa de quirófano, administrativo).
 // ======================================================
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireAbm } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
-router.use(requireAuth, requireAbm);
+router.use(requireAuth, requirePermission("emails:ver"));
 
 /** Últimos 200 emails registrados, del más reciente al más viejo. */
 router.get("/", async (_req, res, next) => {

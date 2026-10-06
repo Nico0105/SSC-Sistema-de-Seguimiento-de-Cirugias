@@ -7,11 +7,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireAbm } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { sendAppointmentConfirmation } from "../lib/email.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+router.use(requireAuth, requirePermission("panel:ver"));
 
 /** Tipos y estados de turno definidos por la documentación funcional. */
 const APPOINTMENT_TYPES = ["consulta", "prequirurgica", "control", "estudio"] as const;
@@ -37,7 +37,7 @@ router.get("/", async (_req, res, next) => {
 });
 
 /** Alta de turno (nace "pendiente" salvo que se indique otro estado). */
-router.post("/", requireAbm, async (req, res, next) => {
+router.post("/", requirePermission("turnos:escribir"), async (req, res, next) => {
   try {
     const data = schema.parse(req.body);
     const created = await prisma.appointment.create({
@@ -58,7 +58,7 @@ router.post("/", requireAbm, async (req, res, next) => {
 });
 
 /** Edición parcial de un turno (reprogramar, confirmar, cancelar, etc.). */
-router.patch("/:id", requireAbm, async (req, res, next) => {
+router.patch("/:id", requirePermission("turnos:escribir"), async (req, res, next) => {
   try {
     const data = schema.partial().parse(req.body);
     const updated = await prisma.appointment.update({
@@ -73,7 +73,7 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
 });
 
 /** Baja física de un turno. */
-router.delete("/:id", requireAbm, async (req, res, next) => {
+router.delete("/:id", requirePermission("turnos:escribir"), async (req, res, next) => {
   try {
     await prisma.appointment.delete({ where: { id: req.params.id } });
     res.status(204).end();

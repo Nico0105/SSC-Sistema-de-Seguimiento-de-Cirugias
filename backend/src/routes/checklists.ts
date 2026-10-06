@@ -17,12 +17,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireChecklistAdmin } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
 // Este router se monta en /api: los middlewares se acotan a sus prefijos
 // para no interceptar requests de otros routers (ej. /api/me del paciente).
-router.use(["/checklist-templates", "/checklist-items", "/surgeries"], requireAuth, requireStaff);
+router.use(["/checklist-templates", "/checklist-items", "/surgeries"], requireAuth, requirePermission("clinica:ver"));
 
 const templateSchema = z.object({
   label: z.string().min(1),
@@ -43,7 +43,7 @@ router.get("/checklist-templates", async (_req, res, next) => {
 });
 
 /** Agrega un ítem a la plantilla. */
-router.post("/checklist-templates", requireChecklistAdmin, async (req, res, next) => {
+router.post("/checklist-templates", requirePermission("checklist:configurar"), async (req, res, next) => {
   try {
     const data = templateSchema.parse(req.body);
     res.status(201).json(await prisma.checklistTemplate.create({ data }));
@@ -51,7 +51,7 @@ router.post("/checklist-templates", requireChecklistAdmin, async (req, res, next
 });
 
 /** Edita un ítem de la plantilla (texto, orden o activo/inactivo). */
-router.patch("/checklist-templates/:id", requireChecklistAdmin, async (req, res, next) => {
+router.patch("/checklist-templates/:id", requirePermission("checklist:configurar"), async (req, res, next) => {
   try {
     const data = templateSchema.partial().parse(req.body);
     res.json(await prisma.checklistTemplate.update({ where: { id: req.params.id }, data }));
@@ -59,7 +59,7 @@ router.patch("/checklist-templates/:id", requireChecklistAdmin, async (req, res,
 });
 
 /** Elimina un ítem de la plantilla (no afecta checklists ya generados). */
-router.delete("/checklist-templates/:id", requireChecklistAdmin, async (req, res, next) => {
+router.delete("/checklist-templates/:id", requirePermission("checklist:configurar"), async (req, res, next) => {
   try {
     await prisma.checklistTemplate.delete({ where: { id: req.params.id } });
     res.status(204).end();

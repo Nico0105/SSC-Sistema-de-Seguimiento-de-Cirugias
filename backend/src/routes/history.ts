@@ -9,7 +9,7 @@
 // ======================================================
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -73,8 +73,9 @@ export async function buildPatientHistory(patientId: string) {
       where: { patientId },
       orderBy: { reportedAt: "desc" },
     }),
+    // Emails de sus cirugías y los dirigidos directamente al paciente (mensajes del médico).
     prisma.emailLog.findMany({
-      where: { surgery: { patientId } },
+      where: { OR: [{ surgery: { patientId } }, { patientId }] },
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -98,7 +99,7 @@ export async function buildPatientHistory(patientId: string) {
 }
 
 /** Historial clínico completo (vista consolidada del staff). */
-router.get("/patients/:id/history", requireAuth, requireStaff, async (req, res, next) => {
+router.get("/patients/:id/history", requireAuth, requirePermission("clinica:ver"), async (req, res, next) => {
   try {
     const history = await buildPatientHistory(req.params.id);
     if (!history) return res.status(404).json({ error: "Paciente no encontrado" });

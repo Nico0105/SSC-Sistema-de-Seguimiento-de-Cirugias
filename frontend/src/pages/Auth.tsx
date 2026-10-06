@@ -38,7 +38,7 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-        <h1 className="text-2xl font-bold text-brand-700 mb-1">SSC</h1>
+        <h1 className="text-2xl font-bold text-brand-700 mb-1">MediQ's</h1>
         <p className="text-sm text-slate-500 mb-6">Iniciar sesión</p>
 
         <form onSubmit={onSubmit} className="space-y-4">

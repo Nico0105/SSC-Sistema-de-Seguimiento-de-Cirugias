@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
+import { can } from "../lib/permissions";
 import { EmptyRow, ErrorAlert, Input, Loading, PrimaryButton, Select, TableCard } from "../components/ui";
 import type { Appointment, Patient } from "../lib/types";
 
@@ -23,7 +23,7 @@ const EMPTY_FORM = { patientId: "", scheduledAt: "", type: "consulta", notes: ""
 
 export default function Appointments() {
   const { user } = useAuth();
-  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
+  const canEdit = can(user?.roles, "turnos:escribir");
 
   const [list, setList] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);

@@ -9,10 +9,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireAbm } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+router.use(requireAuth, requirePermission("panel:ver"));
 
 const patientSchema = z.object({
   firstName: z.string().min(1),
@@ -65,7 +65,7 @@ router.get("/:id", async (req, res, next) => {
 });
 
 /** Alta de paciente. El documento debe ser único (409 si se repite). */
-router.post("/", requireAbm, async (req, res, next) => {
+router.post("/", requirePermission("pacientes:escribir"), async (req, res, next) => {
   try {
     const data = patientSchema.parse(req.body);
     const created = await prisma.patient.create({
@@ -79,7 +79,7 @@ router.post("/", requireAbm, async (req, res, next) => {
 });
 
 /** Edición parcial de los datos de un paciente. */
-router.patch("/:id", requireAbm, async (req, res, next) => {
+router.patch("/:id", requirePermission("pacientes:escribir"), async (req, res, next) => {
   try {
     const data = patientSchema.partial().parse(req.body);
     const updated = await prisma.patient.update({
@@ -94,7 +94,7 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
 });
 
 /** Borrado lógico: marca la fecha de eliminación sin destruir datos. */
-router.delete("/:id", requireAbm, async (req, res, next) => {
+router.delete("/:id", requirePermission("pacientes:escribir"), async (req, res, next) => {
   try {
     await prisma.patient.update({
       where: { id: req.params.id },

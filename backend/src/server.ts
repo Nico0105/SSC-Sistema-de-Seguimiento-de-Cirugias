@@ -30,6 +30,7 @@ import symptomRoutes from "./routes/symptoms.js";
 import postopRoutes from "./routes/postop.js";
 import historyRoutes from "./routes/history.js";
 import meRoutes from "./routes/me.js";
+import messageRoutes from "./routes/messages.js";
 import fcmTokenRoutes from "./routes/fcm-tokens.js";
 import emailLogRoutes from "./routes/emails.js";
 import { startReminderScheduler } from "./lib/scheduler.js";
@@ -66,6 +67,7 @@ app.use("/api", symptomRoutes);
 app.use("/api", postopRoutes);
 app.use("/api", historyRoutes);
 app.use("/api", meRoutes);
+app.use("/api", messageRoutes);
 // Notificaciones push y auditoría de emails.
 app.use("/api/fcm-tokens", fcmTokenRoutes);
 app.use("/api/email-logs", emailLogRoutes);
@@ -84,7 +86,7 @@ io.on("connection", (socket) => {
 
 // --- Arranque y apagado ordenado --------------------------------
 httpServer.listen(env.port, () => {
-  console.log(`SSC backend escuchando en http://localhost:${env.port}`);
+  console.log(`MediQ's backend escuchando en http://localhost:${env.port}`);
   // Recordatorios automáticos de cirugía (48 h / 24 h) por email + push.
   startReminderScheduler();
 });

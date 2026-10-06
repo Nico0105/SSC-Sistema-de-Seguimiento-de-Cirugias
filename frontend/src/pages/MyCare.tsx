@@ -13,6 +13,7 @@ import { api, getErrorMessage } from "../lib/api-client";
 import { SYMPTOM_LABEL, SYMPTOM_OPTIONS, POSTOP_STATUS_LABEL } from "../lib/symptoms";
 import { ErrorAlert, Input, Loading, PrimaryButton, StatusBadge } from "../components/ui";
 import ChecklistPanel from "../components/ChecklistPanel";
+import MessagesPanel from "../components/MessagesPanel";
 import type { Patient, PostopRecord, Surgery, SymptomReport } from "../lib/types";
 
 type OwnSurgery = Omit<Surgery, "patient">;
@@ -96,6 +97,9 @@ export default function MyCare() {
         Hola {patient?.firstName}. Acá podés ver el estado de tus cirugías, tu checklist,
         tus indicaciones y registrar cómo te sentís cada día.
       </p>
+
+      {/* Mensajes que le dejó su médico (sólo lectura) */}
+      <MessagesPanel endpoint="/api/me/messages" canWrite={false} />
 
       {/* Cirugías propias con su checklist */}
       <h2 className="font-semibold text-slate-800 mb-3">Mis cirugías</h2>

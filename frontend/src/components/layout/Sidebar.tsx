@@ -9,7 +9,7 @@
 import { NavLink } from "react-router-dom";
 import { ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
 import { useAuth } from "../../lib/auth-context";
-import { hasAnyRole } from "../../lib/permissions";
+import { can } from "../../lib/permissions";
 import { NAV_SECTIONS } from "../../lib/nav-config";
 import { cn } from "../../lib/cn";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -31,12 +31,12 @@ export function Sidebar({
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white font-bold shrink-0">
           S
         </div>
-        {!collapsed && <span className="text-lg font-bold text-brand-700">SSC</span>}
+        {!collapsed && <span className="text-lg font-bold text-brand-700">MediQ's</span>}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 space-y-5" aria-label="Navegación principal">
         {NAV_SECTIONS.map((section) => {
-          const items = section.items.filter((item) => hasAnyRole(user?.roles, item.roles));
+          const items = section.items.filter((item) => can(user?.roles, item.permission));
           if (items.length === 0) return null;
           return (
             <div key={section.label}>

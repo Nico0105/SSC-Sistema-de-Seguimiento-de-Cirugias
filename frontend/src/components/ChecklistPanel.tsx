@@ -16,13 +16,20 @@ export default function ChecklistPanel({
   canEdit,
   /** Endpoint a usar: el staff usa /api/surgeries/..., el paciente /api/me/... */
   endpoint = `/api/surgeries/${surgeryId}/checklist`,
+  /** Se llama cada vez que cambian los ítems (lo usa el detalle para habilitar el avance de estado). */
+  onItemsChange,
 }: {
   surgeryId: string;
   canEdit: boolean;
   endpoint?: string;
+  onItemsChange?: (items: ChecklistItem[]) => void;
 }) {
   const [items, setItems] = useState<ChecklistItem[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (items) onItemsChange?.(items);
+  }, [items, onItemsChange]);
 
   const load = useCallback(async () => {
     try {

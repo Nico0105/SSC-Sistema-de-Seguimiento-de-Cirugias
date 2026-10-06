@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { ADMIN_ROLES, ROLE_LABEL, hasAnyRole, type Role } from "../lib/permissions";
+import { ROLE_LABEL, can, type Role } from "../lib/permissions";
 import { EmptyRow, ErrorAlert, Input, Loading, PrimaryButton, TableCard } from "../components/ui";
 
 interface AppUser {
@@ -58,7 +58,7 @@ export default function Users() {
   useEffect(() => { void load(); }, [load]);
 
   // Doble protección: la ruta también está restringida en el backend.
-  if (!hasAnyRole(me?.roles, ADMIN_ROLES)) return <Navigate to="/dashboard" replace />;
+  if (!can(me?.roles, "usuarios:gestionar")) return <Navigate to="/dashboard" replace />;
 
   /** Agrega o quita un rol de una lista (checkboxes). */
   function toggleRole(role: Role, roles: Role[], setRoles: (r: Role[]) => void) {

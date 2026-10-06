@@ -19,7 +19,7 @@ segunda etapa de desarrollo. Sirve como anexo formal hasta regenerar los PDF.
 - **Autenticación**: JWT (con renovación de token y sesión persistida en mobile)
 - **Socket.IO** — comunicación en tiempo real (panel interno y pantalla pública)
 - **Firebase Cloud Messaging** — API de notificaciones push (web y mobile)
-- **Resend API** — API de envío de correos electrónicos transaccionales
+- **Brevo API** — API de envío de correos electrónicos transaccionales (plan gratuito)
 
 ## 2. Funcionalidades incorporadas
 
@@ -42,7 +42,7 @@ segunda etapa de desarrollo. Sirve como anexo formal hasta regenerar los PDF.
 6. **Login mobile**: autenticación JWT en React Native con sesión persistida en
    almacenamiento seguro (expo-secure-store), renovación de token al abrir la app
    y cierre de sesión.
-7. **Notificaciones push (FCM)** y **emails automáticos (Resend)**: ver
+7. **Notificaciones push (FCM)** y **emails automáticos (Brevo)**: ver
    `docs/NOTIFICACIONES.md` (flujo completo, eventos y configuración).
 
 ## 3. Casos de uso agregados
@@ -69,5 +69,5 @@ segunda etapa de desarrollo. Sirve como anexo formal hasta regenerar los PDF.
 ## 5. Variables de entorno agregadas
 
 Ver `backend/.env.example` y `frontend/.env.example`:
-`RESEND_API_KEY`, `EMAIL_FROM`, `FIREBASE_SERVICE_ACCOUNT_BASE64` /
+`BREVO_API_KEY`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, `FIREBASE_SERVICE_ACCOUNT_BASE64` /
 `FIREBASE_SERVICE_ACCOUNT_PATH`, `VITE_FIREBASE_*`, `VITE_FIREBASE_VAPID_KEY`.

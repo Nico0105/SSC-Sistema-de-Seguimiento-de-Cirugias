@@ -1,7 +1,7 @@
 // ======================================================
 // Auditoría de emails (pages/EmailLogs.tsx)
 // Listado de los correos que el sistema envió (o intentó
-// enviar) vía Resend: confirmaciones, reprogramaciones,
+// enviar) vía Brevo: confirmaciones, reprogramaciones,
 // recordatorios 48/24 h, indicaciones y altas. Permite al
 // personal ABM verificar qué recibió cada paciente.
 // ======================================================
@@ -19,6 +19,8 @@ const TYPE_LABEL: Record<string, string> = {
   indicaciones_preoperatorias: "Indicaciones preoperatorias",
   alta_medica: "Alta médica",
   confirmacion_control: "Confirmación de turno",
+  mensaje_medico: "Mensaje del médico",
+  prueba: "Prueba de envío",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -49,7 +51,7 @@ export default function EmailLogs() {
     <div className="p-4 md:p-8">
       <h1 className="text-2xl font-bold text-slate-800 mb-1">Emails enviados</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Correos automáticos del sistema (Resend). "Omitido" indica que faltaba la API key
+        Correos automáticos del sistema (Brevo). "Omitido" indica que faltaba la API key
         o que el paciente no tiene email cargado.
       </p>
 

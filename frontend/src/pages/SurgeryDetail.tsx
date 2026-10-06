@@ -9,25 +9,34 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { CLINICAL_ROLES, STATUS_CHANGE_ROLES, hasAnyRole } from "../lib/permissions";
+import { can } from "../lib/permissions";
 import { ALLOWED_TRANSITIONS, STATUS_COLOR, STATUS_LABEL, type SurgeryStatus } from "../lib/surgery-status";
 import { useRealtime } from "../hooks/use-realtime";
 import { ErrorAlert, Loading, StatusBadge } from "../components/ui";
 import ChecklistPanel from "../components/ChecklistPanel";
 import PostopPanel from "../components/PostopPanel";
-import type { SurgeryDetail as SurgeryDetailData } from "../lib/types";
+import type { ChecklistItem, SurgeryDetail as SurgeryDetailData } from "../lib/types";
 
 export default function SurgeryDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const canChangeStatus = hasAnyRole(user?.roles, STATUS_CHANGE_ROLES);
-  const canCreatePostop = hasAnyRole(user?.roles, CLINICAL_ROLES);
+  const canChangeStatus = can(user?.roles, "cirugias:cambiar_estado");
+  const canCreatePostop = can(user?.roles, "postop:escribir");
+  const canSeeClinical = can(user?.roles, "clinica:ver");
 
   const [surgery, setSurgery] = useState<SurgeryDetailData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
   /** Número de sala a informar al pasar a "esperando_en_sala". */
   const [room, setRoom] = useState("");
+  /**
+   * Ítems del checklist sin marcar. null = todavía no se cargó (o el usuario
+   * no ve el checklist): no se bloquea en la UI y decide el backend.
+   */
+  const [pendingChecks, setPendingChecks] = useState<string[] | null>(null);
+  const onChecklistChange = useCallback((items: ChecklistItem[]) => {
+    setPendingChecks(items.filter((i) => !i.checked).map((i) => i.label));
+  }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -75,6 +84,8 @@ export default function SurgeryDetail() {
 
   // Sólo se ofrecen los pasos válidos desde el estado actual.
   const nextStatuses = ALLOWED_TRANSITIONS[surgery.status];
+  // Avanzar exige el checklist completo; cancelar no (mismo criterio que el backend).
+  const checklistBlocks = (pendingChecks?.length ?? 0) > 0;
 
   return (
     <div className="p-4 md:p-8 max-w-4xl">
@@ -133,28 +144,40 @@ export default function SurgeryDetail() {
               <button
                 key={st}
                 onClick={() => void changeStatus(st)}
-                disabled={changing}
-                className="px-3 py-1.5 rounded-full text-xs font-medium border transition bg-white text-slate-700 border-slate-200 hover:border-brand-300 disabled:opacity-50"
+                disabled={changing || (st !== "cancelada" && checklistBlocks)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium border transition bg-white text-slate-700 border-slate-200 hover:border-brand-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {STATUS_LABEL[st]} →
               </button>
             ))}
           </div>
-          <p className="text-xs text-slate-400 mt-3">
-            Sólo se muestran los pasos válidos del flujo quirúrgico.
-          </p>
+          {checklistBlocks ? (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status">
+              Para avanzar hay que completar el checklist preoperatorio. Falta: {pendingChecks!.join(", ")}.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-400 mt-3">
+              Sólo se muestran los pasos válidos del flujo quirúrgico.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Checklist preoperatorio (editable por el staff) */}
-      <div className="mb-6">
-        <ChecklistPanel surgeryId={surgery.id} canEdit={true} />
-      </div>
-
-      {/* Seguimiento postoperatorio (carga sólo el personal clínico) */}
-      <div className="mb-6">
-        <PostopPanel surgeryId={surgery.id} canCreate={canCreatePostop} />
-      </div>
+      {/* Checklist y seguimiento: información clínica, oculta para la recepción. */}
+      {canSeeClinical && (
+        <>
+          <div className="mb-6">
+            <ChecklistPanel
+              surgeryId={surgery.id}
+              canEdit={can(user?.roles, "clinica:escribir")}
+              onItemsChange={onChecklistChange}
+            />
+          </div>
+          <div className="mb-6">
+            <PostopPanel surgeryId={surgery.id} canCreate={canCreatePostop} />
+          </div>
+        </>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6">
         <h2 className="font-semibold text-slate-800 mb-3">Línea de tiempo</h2>

@@ -1,4 +1,4 @@
-# SSC — Sistema de Seguimiento de Cirugías Especializadas
+# MediQ's — Sistema de Seguimiento de Cirugías Especializadas
 
 Monorepo con tres proyectos independientes:
 
@@ -17,7 +17,7 @@ Monorepo con tres proyectos independientes:
 | Autenticación | JWT (renovación de token + sesión segura en mobile) |
 | Tiempo real | **Socket.IO** (panel interno y pantalla pública) |
 | Notificaciones push | **Firebase Cloud Messaging** (web y mobile) |
-| Emails transaccionales | **Resend API** (con auditoría en base de datos) |
+| Emails transaccionales | **Brevo API** (plan gratuito, con auditoría en base de datos) |
 
 > Flujo completo de notificaciones: [`docs/NOTIFICACIONES.md`](docs/NOTIFICACIONES.md)
 
@@ -55,7 +55,7 @@ cd backend
 npm install
 cp .env.example .env       # con la Opción A no hace falta editar nada
 npx prisma migrate deploy  # aplica las migraciones ya versionadas del repo
-npm run seed               # crea admin demo: admin@ssc.local / Admin123!
+npm run seed               # crea un usuario por rol (ver CREDENCIALES.md)
 npm run dev                # http://localhost:4000
 ```
 
@@ -70,7 +70,7 @@ npm run dev                # http://localhost:3000
 ```
 
 ### 5. Probar
-1. Abrí `http://localhost:3000/auth` y entrá con `admin@ssc.local` / `Admin123!`
+1. Abrí `http://localhost:3000/auth` y entrá con `admin@mediqus.local` / `Admin123!` (el resto de los usuarios por rol están en [`CREDENCIALES.md`](CREDENCIALES.md))
 2. Cargá un paciente en `/patients`
 3. Creá una cirugía en `/surgeries`
 4. Abrí `/board` en otra ventana → avanzá el estado de la cirugía desde el detalle y verás la actualización en tiempo real.
@@ -103,7 +103,7 @@ npm start                  # Expo; escanear el QR con Expo Go
 ```
 
 ## Modelos de datos
-- `User` + `UserRole` (admin · jefe_quirofano · medico · administrativo · enfermero · familiar · **paciente**)
+- `User` + `UserRole` (admin · jefe_quirofano · medico · enfermero · recepcionista · administrativo · **paciente**)
 - `Patient` (con soft delete y vínculo opcional a una cuenta de acceso propia)
 - `OperatingRoom`
 - `Surgery` + `SurgeryStatusHistory` (timeline de cambios de estado)
@@ -111,6 +111,7 @@ npm start                  # Expo; escanear el QR con Expo Go
 - `ChecklistTemplate` + `SurgeryChecklistItem` (checklist preoperatorio configurable)
 - `SymptomReport` (registro diario de síntomas del paciente)
 - `PostopRecord` (controles del seguimiento postoperatorio)
+- `PatientMessage` (mensajes del médico a cada paciente)
 - `FcmToken` (dispositivos registrados para push) + `EmailLog` (auditoría de emails)
 
 ## Flujo de estados de una cirugía
@@ -123,32 +124,42 @@ programada → en_quirofano → esperando_en_sala (N) → postoperatorio → alt
      └──► cancelada   (sólo mientras está programada)
 ```
 
+**Ningún avance es posible con el checklist preoperatorio incompleto**: si falta
+marcar algún ítem, el backend rechaza el cambio de estado (409) indicando cuáles
+faltan, y la pantalla de detalle deshabilita los botones y los lista. Se controla
+en cada paso, así que desmarcar un ítem después también frena el flujo. Cancelar
+una cirugía programada sigue permitido sin checklist.
+
 Al entrar a quirófano se registra `startedAt`. Al salir, el paso a
 "Esperando en sala" **exige el número de sala** (`waitingRoom`), se registra
 `endedAt` y la pantalla de familiares muestra "Esperando en sala N".
 
 ## Roles y permisos
 
-| Acción                            | admin | jefe_quirofano | administrativo | medico | enfermero | paciente |
-|-----------------------------------|:-----:|:--------------:|:--------------:|:------:|:---------:|:--------:|
-| Ver panel interno                 |  ✔    |  ✔             |  ✔             |  ✔     |  ✔        |          |
-| ABM pacientes/cirugías/turnos     |  ✔    |  ✔             |  ✔             |        |           |          |
-| Cambiar estado de cirugía         |  ✔    |  ✔             |                |        |  ✔        |          |
-| Configurar plantilla de checklist |  ✔    |  ✔             |                |        |           |          |
-| Marcar checklist de una cirugía   |  ✔    |  ✔             |  ✔             |  ✔     |  ✔        |          |
-| Cargar control postoperatorio     |  ✔    |  ✔             |                |  ✔     |  ✔        |          |
-| Ver historial clínico             |  ✔    |  ✔             |  ✔             |  ✔     |  ✔        | sólo el propio |
-| Registrar síntomas                |  ✔*   |  ✔*            |  ✔*            |  ✔*    |  ✔*       | ✔ (propios) |
-| Auditoría de emails               |  ✔    |  ✔             |  ✔             |        |           |          |
-| Gestión de usuarios               |  ✔    |                |                |        |           |          |
+| Acción                            | admin | jefe | médico | enfermero | recepción | administrativo | paciente |
+|-----------------------------------|:-----:|:----:|:------:|:---------:|:---------:|:--------------:|:--------:|
+| Ver panel interno                 |  ✔    |  ✔   |  ✔     |  ✔        |  ✔        |  ✔             |          |
+| Alta/edición de pacientes         |  ✔    |  ✔   |        |           |  ✔        |  ✔             |          |
+| Alta/edición de turnos            |  ✔    |  ✔   |        |           |           |  ✔             |          |
+| Alta/edición de cirugías          |  ✔    |  ✔   |        |           |           |  ✔             |          |
+| Cambiar estado de cirugía         |  ✔    |  ✔   |        |  ✔        |           |                |          |
+| Ver historial clínico             |  ✔    |  ✔   |  ✔     |  ✔        |           |  ✔             | sólo el propio |
+| Marcar checklist / cargar síntomas|  ✔    |  ✔   |  ✔     |  ✔        |           |  ✔             | síntomas propios |
+| Configurar plantilla de checklist |  ✔    |  ✔   |        |           |           |                |          |
+| Cargar control postoperatorio     |  ✔    |  ✔   |  ✔     |  ✔        |           |                |          |
+| Dejar mensajes al paciente (email)|  ✔    |      |  ✔     |           |           |                | los lee en su portal |
+| Auditoría de emails               |  ✔    |  ✔   |        |           |           |  ✔             |          |
+| Gestión de usuarios               |  ✔    |      |        |           |           |                |          |
 
-\* el staff puede cargar síntomas en nombre del paciente.
+La matriz vive en un solo lugar: `backend/src/middleware/auth.ts` (`PERMISSIONS`), con
+su espejo para la interfaz en `frontend/src/lib/permissions.ts`. Usuarios de prueba
+de cada rol: [`CREDENCIALES.md`](CREDENCIALES.md).
 
 El **rol paciente** sólo accede a su portal (`/my-care` en web, la app móvil):
 ve sus datos, sus cirugías, su checklist (lectura), sus indicaciones y evolución,
 y registra síntomas. No administra pacientes ni edita cirugías.
 
-La pantalla `/board` y el tablero de la app móvil son públicos y sólo muestran el
+Los **familiares no tienen cuenta**: la pantalla `/board` y el tablero de la app móvil son públicos y sólo muestran el
 **código público anónimo** de cada cirugía (nunca datos del paciente).
 
 ## Funcionalidades principales
@@ -158,12 +169,13 @@ La pantalla `/board` y el tablero de la app móvil son públicos y sólo muestra
 - **Registro de síntomas** diario del paciente (web y mobile)
 - **Seguimiento postoperatorio** con controles clínicos e historial cronológico
 - **Historial clínico consolidado** con alertas automáticas
+- **Mensajes del médico al paciente**: hilo individual en la historia de cada paciente; cada mensaje le llega por email y lo ve en su portal
 - **Portal del paciente** (web `/my-care` y app móvil con login JWT persistido)
 - Dashboard, pantalla pública para familiares y actualización en tiempo real (Socket.IO)
-- **Notificaciones push** (FCM) y **emails automáticos** (Resend) con recordatorios 48/24 h
+- **Notificaciones push** (FCM) y **emails automáticos** (Brevo) con recordatorios 48/24 h
 
 ## Documentación adicional
-- [`docs/NOTIFICACIONES.md`](docs/NOTIFICACIONES.md) — flujo completo de Socket.IO + FCM + Resend y su configuración.
+- [`docs/NOTIFICACIONES.md`](docs/NOTIFICACIONES.md) — flujo completo de Socket.IO + FCM + Brevo y su configuración.
 - [`docs/ACTUALIZACION_ALCANCE.md`](docs/ACTUALIZACION_ALCANCE.md) — anexo con los cambios a reflejar en el documento de alcance (tecnologías, casos de uso, modelo de datos).
 - [`docs/AUDITORIA.md`](docs/AUDITORIA.md) — informe de auditoría técnica de la primera etapa.
 

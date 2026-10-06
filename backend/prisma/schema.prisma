@@ -4,7 +4,7 @@
 // cirugías con timeline de estados y turnos.
 // Módulo de cuidado del paciente: checklist preoperatorio,
 // registro de síntomas y seguimiento postoperatorio.
-// Notificaciones: tokens FCM (push) y log de emails (Resend).
+// Notificaciones: tokens FCM (push) y log de emails (Brevo).
 // ======================================================
 
 generator client {
@@ -18,13 +18,15 @@ datasource db {
 
 /// Roles del sistema. "paciente" es el rol de autogestión: sólo ve su
 /// propia información (vía el vínculo User ↔ Patient) y registra síntomas.
+/// Los familiares no tienen rol: usan la pantalla pública sin cuenta.
+/// Qué puede hacer cada rol: src/middleware/auth.ts (PERMISSIONS).
 enum AppRole {
   admin
   jefe_quirofano
   medico
-  administrativo
   enfermero
-  familiar
+  recepcionista
+  administrativo
   paciente
 }
 
@@ -54,6 +56,7 @@ model User {
   checklistChecks SurgeryChecklistItem[] @relation("ChecklistCheckedBy")
   postopRecords  PostopRecord[]         @relation("PostopCreatedBy")
   fcmTokens      FcmToken[]
+  patientMessages PatientMessage[] @relation("PatientMessageAuthor")
 }
 
 model UserRole {
@@ -87,6 +90,8 @@ model Patient {
   surgeries    Surgery[]
   appointments Appointment[]
   symptomReports SymptomReport[]
+  messages     PatientMessage[]
+  emailLogs    EmailLog[]
 
   @@index([lastName, firstName])
 }
@@ -262,7 +267,7 @@ model FcmToken {
   @@index([userId])
 }
 
-/// Registro de cada email enviado (o fallido/omitido) vía Resend.
+/// Registro de cada email enviado (o fallido/omitido) vía Brevo.
 /// Sirve de auditoría y para no duplicar recordatorios 48h/24h.
 model EmailLog {
   id        String   @id @default(uuid())
@@ -272,10 +277,37 @@ model EmailLog {
   status    String   // enviado | fallido | omitido
   error     String?
   surgeryId String?
+  /// Paciente destinatario, para emails que no dependen de una cirugía
+  /// (por ejemplo los mensajes del médico).
+  patientId String?
   createdAt DateTime @default(now())
 
   surgery Surgery? @relation(fields: [surgeryId], references: [id], onDelete: SetNull)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
 
   @@index([surgeryId])
+  @@index([patientId])
   @@index([type, surgeryId])
+}
+
+// ------------------------------------------------------
+// Mensajes del médico al paciente
+// ------------------------------------------------------
+
+/// Anotación que el médico le deja a UN paciente. Es un hilo individual
+/// por paciente donde sólo escribe el equipo médico; cada mensaje se le
+/// envía al paciente por email y lo ve también en su portal.
+model PatientMessage {
+  id          String   @id @default(uuid())
+  patientId   String
+  authorId    String?
+  body        String
+  /// Resultado del envío por email: enviado | fallido | omitido.
+  emailStatus String?
+  createdAt   DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  author  User?   @relation("PatientMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, createdAt])
 }

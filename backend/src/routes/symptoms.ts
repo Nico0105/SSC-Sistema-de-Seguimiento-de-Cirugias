@@ -8,11 +8,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
 // Montado en /api: middleware acotado a su prefijo (ver checklists.ts).
-router.use("/patients", requireAuth, requireStaff);
+router.use("/patients", requireAuth, requirePermission("clinica:ver"));
 
 /** Catálogo de síntomas ofrecidos por la documentación funcional. */
 export const SYMPTOMS = [

@@ -5,7 +5,7 @@
 // acoplar los controladores al servidor de sockets.
 // Socket.IO es el ÚNICO canal de tiempo real del sistema;
 // las notificaciones push van por Firebase Cloud Messaging
-// (lib/fcm.ts) y los emails por Resend (lib/email.ts).
+// (lib/fcm.ts) y los emails por Brevo (lib/email.ts).
 // ======================================================
 import type { Server as SocketServer } from "socket.io";
 

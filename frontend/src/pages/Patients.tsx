@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
+import { can } from "../lib/permissions";
 import { EmptyRow, ErrorAlert, Input, Loading, PrimaryButton, TableCard } from "../components/ui";
 import type { Patient } from "../lib/types";
 
@@ -28,7 +28,8 @@ const FORM_FIELDS: { key: keyof typeof EMPTY_FORM; label: string; required?: boo
 
 export default function Patients() {
   const { user } = useAuth();
-  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
+  const canEdit = can(user?.roles, "pacientes:escribir");
+  const canSeeHistory = can(user?.roles, "clinica:ver");
 
   const [list, setList] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,10 +138,12 @@ export default function Patients() {
                   <td className="px-6 py-3 text-slate-500">{p.phone ?? p.email ?? "—"}</td>
                   <td className="px-6 py-3">{p.bloodType ?? "—"}</td>
                   <td className="px-6 py-3 text-right space-x-3 whitespace-nowrap">
-                    {/* Historial clínico consolidado del paciente. */}
-                    <Link to={`/patients/${p.id}/history`} className="text-brand-600 text-xs hover:underline">
-                      Historia →
-                    </Link>
+                    {/* Historial clínico consolidado (la recepción no accede a datos clínicos). */}
+                    {canSeeHistory && (
+                      <Link to={`/patients/${p.id}/history`} className="text-brand-600 text-xs hover:underline">
+                        Historia →
+                      </Link>
+                    )}
                     {canEdit && (
                       <button onClick={() => void remove(p.id)} className="text-rose-600 text-xs hover:underline">
                         Eliminar

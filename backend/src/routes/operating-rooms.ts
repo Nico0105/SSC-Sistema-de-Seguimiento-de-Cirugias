@@ -6,10 +6,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireAbm } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+router.use(requireAuth, requirePermission("panel:ver"));
 
 const schema = z.object({
   code: z.string().min(1),
@@ -26,7 +26,7 @@ router.get("/", async (_req, res, next) => {
 });
 
 /** Alta de quirófano (código único: 409 si se repite). */
-router.post("/", requireAbm, async (req, res, next) => {
+router.post("/", requirePermission("quirofanos:escribir"), async (req, res, next) => {
   try {
     const data = schema.parse(req.body);
     res.status(201).json(await prisma.operatingRoom.create({ data }));
@@ -34,7 +34,7 @@ router.post("/", requireAbm, async (req, res, next) => {
 });
 
 /** Edición parcial de un quirófano. */
-router.patch("/:id", requireAbm, async (req, res, next) => {
+router.patch("/:id", requirePermission("quirofanos:escribir"), async (req, res, next) => {
   try {
     const data = schema.partial().parse(req.body);
     res.json(await prisma.operatingRoom.update({ where: { id: req.params.id }, data }));
@@ -46,7 +46,7 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
  * lo impide y el error handler responde 409 (usar `active: false`
  * para retirarlo de servicio sin perder historial).
  */
-router.delete("/:id", requireAbm, async (req, res, next) => {
+router.delete("/:id", requirePermission("quirofanos:escribir"), async (req, res, next) => {
   try {
     await prisma.operatingRoom.delete({ where: { id: req.params.id } });
     res.status(204).end();

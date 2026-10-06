@@ -50,11 +50,13 @@ export const env = {
   jwtExpiresIn: "7d",
   corsOrigins: resolveCorsOrigins(),
 
-  // --- Emails transaccionales (Resend) ---------------------------
-  /** API key de Resend. Si falta, los emails se registran como "omitido". */
-  resendApiKey: process.env.RESEND_API_KEY ?? null,
-  /** Remitente de los emails (debe ser un dominio verificado en Resend). */
-  emailFrom: process.env.EMAIL_FROM ?? "SSC <onboarding@resend.dev>",
+  // --- Emails transaccionales (Brevo) ----------------------------
+  /** API key de Brevo. Si falta, los emails se registran como "omitido". */
+  brevoApiKey: process.env.BREVO_API_KEY || null,
+  /** Email remitente: debe estar verificado como "sender" en Brevo. */
+  emailFromAddress: process.env.EMAIL_FROM_ADDRESS || null,
+  /** Nombre que ve el destinatario como remitente. */
+  emailFromName: process.env.EMAIL_FROM_NAME || "MediQ's",
 
   // --- Notificaciones push (Firebase Cloud Messaging) ------------
   /**

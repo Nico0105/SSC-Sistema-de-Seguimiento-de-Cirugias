@@ -3,7 +3,8 @@
 // Vista del staff con TODO lo del paciente en una página:
 // datos personales, alertas automáticas, medicación vigente,
 // cirugías (estado, timeline, checklist y controles postop),
-// registro de síntomas y emails enviados. Todo ordenado
+// registro de síntomas, mensajes del médico al paciente
+// y emails enviados. Todo ordenado
 // cronológicamente (lo más reciente primero).
 // ======================================================
 import { useCallback, useEffect, useState } from "react";
@@ -11,12 +12,16 @@ import { Link, useParams } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api-client";
 import { SYMPTOM_LABEL, POSTOP_STATUS_LABEL } from "../lib/symptoms";
 import { ErrorAlert, Loading, StatusBadge } from "../components/ui";
+import MessagesPanel from "../components/MessagesPanel";
+import { useAuth } from "../lib/auth-context";
+import { can } from "../lib/permissions";
 import type { PatientHistoryData } from "../lib/types";
 
 export default function PatientHistory() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<PatientHistoryData | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -62,6 +67,13 @@ export default function PatientHistory() {
           </ul>
         </div>
       )}
+
+      {/* Mensajes del médico al paciente (le llegan por email) */}
+      <MessagesPanel
+        endpoint={`/api/patients/${patient.id}/messages`}
+        canWrite={can(user?.roles, "mensajes:escribir")}
+        patientHasEmail={Boolean(patient.email)}
+      />
 
       {/* Medicación vigente */}
       {data.medication.length > 0 && (

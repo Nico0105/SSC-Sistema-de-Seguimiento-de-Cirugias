@@ -6,7 +6,7 @@ El sistema usa **tres canales**, cada uno con una responsabilidad clara:
 |-------|-----------|-----------------|
 | Tiempo real | **Socket.IO** (autoalojado, mismo puerto que la API) | Refrescar en vivo el panel interno y la pantalla pública de familiares |
 | Push | **Firebase Cloud Messaging (FCM)** | Avisos al paciente en su celular / navegador |
-| Email | **Resend API** | Correos transaccionales (confirmaciones, recordatorios, alta) |
+| Email | **Brevo API** (plan gratuito) | Correos transaccionales (confirmaciones, recordatorios, alta) |
 
 > El sistema **no usa Pusher**. Socket.IO cubre el tiempo real.
 
@@ -49,12 +49,12 @@ El sistema usa **tres canales**, cada uno con una responsabilidad clara:
   producción hay que agregar `google-services.json` (Android) via `expo prebuild`
   o EAS Build. El registro falla de forma silenciosa si no está configurado.
 
-## 3. Emails (Resend)
+## 3. Emails (Brevo)
 
 ### Flujo
 1. Las rutas de negocio llaman a los helpers de `backend/src/lib/email.ts`
    (`sendSurgeryConfirmation`, `sendSurgeryReminder`, etc.).
-2. El servicio envía por la API HTTP de Resend (`RESEND_API_KEY`, `EMAIL_FROM`).
+2. El servicio envía por la API HTTP de Brevo (`BREVO_API_KEY`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`). Brevo no exige dominio propio: alcanza con verificar el email remitente. Para probar: `npm run email:test -- tu@email.com`.
 3. **Cada intento queda auditado** en la tabla `EmailLog` con estado
    `enviado` / `fallido` / `omitido` (omitido = sin API key o el paciente no tiene
    email). El envío nunca rompe la operación de negocio que lo disparó.
@@ -78,4 +78,4 @@ El sistema usa **tres canales**, cada uno con una responsabilidad clara:
   48 h / 24 h.
 - Usa `EmailLog` como registro de idempotencia: cada recordatorio se envía **una
   sola vez por cirugía**, aunque el proceso se reinicie.
-- Envía email (Resend) + push (FCM) en el mismo ciclo.
+- Envía email (Brevo) + push (FCM) en el mismo ciclo.
