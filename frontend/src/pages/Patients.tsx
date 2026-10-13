@@ -1,115 +1,293 @@
-import { useEffect, useState } from "react";
-import { api } from "../lib/api-client";
+// ======================================================
+// Pacientes (pages/Patients.tsx)
+// Directorio de pacientes con su situación quirúrgica actual,
+// reducido a lo necesario para decidir: quién es, qué cirugía
+// tiene y en qué estado está (más una alergia, si existe).
+// Contacto, medicación e historial viven en la historia clínica.
+//   - Alta en panel lateral y baja lógica con confirmación
+//     (el backend conserva el registro para el historial).
+// La cirugía "vigente" de cada paciente se deriva del listado
+// de cirugías ya cacheado: no hace falta otro endpoint.
+// ======================================================
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { MoreHorizontal, UserPlus } from "lucide-react";
+import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
-import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
+import { can } from "../lib/permissions";
+import { toast } from "../lib/toast";
+import { ACTIVE_STATUSES, STATUS_LABEL } from "../lib/surgery-status";
+import { ageFrom, formatCode, formatDate, formatTime, isToday } from "../lib/format";
+import { useSurgeriesQuery } from "../hooks/use-surgeries-query";
+import { PATIENTS_QUERY_KEY, usePatientsQuery } from "../hooks/use-catalog-queries";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { DataTable } from "../components/ui/data-table";
+import { ErrorAlert } from "../components/ui/alert";
+import { PageHeader } from "../components/ui/page-header";
+import { StatusBadge } from "../components/ui/status-badge";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { Sheet, SheetContent } from "../components/ui/sheet";
+import { Input } from "../components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import type { Patient, Surgery } from "../lib/types";
 
-interface Patient {
-  id: string;
-  firstName: string;
-  lastName: string;
-  documentId: string;
-  phone: string | null;
-  email: string | null;
-  bloodType: string | null;
+/** Estado inicial del formulario de alta. */
+const EMPTY_FORM = {
+  firstName: "",
+  lastName: "",
+  documentId: "",
+  birthDate: "",
+  phone: "",
+  email: "",
+  bloodType: "",
+  allergies: "",
+};
+
+const FORM_ID = "new-patient-form";
+
+/** Paciente + su cirugía vigente (la activa más próxima, o la última). */
+interface PatientRow extends Patient {
+  surgery: Surgery | null;
+}
+
+/** Elige la cirugía que representa la situación actual del paciente. */
+function currentSurgery(list: Surgery[]): Surgery | null {
+  const active = list
+    .filter((s) => ACTIVE_STATUSES.includes(s.status))
+    .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt));
+  if (active.length) return active[0]!;
+  return [...list].sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt))[0] ?? null;
 }
 
 export default function Patients() {
   const { user } = useAuth();
-  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
-  const [list, setList] = useState<Patient[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", documentId: "", phone: "", email: "", bloodType: "" });
-  const [err, setErr] = useState<string | null>(null);
+  const canEdit = can(user?.roles, "pacientes:escribir");
+  const canSeeHistory = can(user?.roles, "clinica:ver");
+  const queryClient = useQueryClient();
 
-  async function load() {
-    setList(await api.get<Patient[]>("/api/patients"));
-  }
-  useEffect(() => { load(); }, []);
+  const { data: patients = [], isLoading, error } = usePatientsQuery();
+  const { data: surgeries = [] } = useSurgeriesQuery();
 
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<Patient | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const rows: PatientRow[] = useMemo(() => {
+    const byPatient = new Map<string, Surgery[]>();
+    for (const s of surgeries) {
+      const list = byPatient.get(s.patient.id) ?? [];
+      list.push(s);
+      byPatient.set(s.patient.id, list);
+    }
+    return patients.map((p) => ({ ...p, surgery: currentSurgery(byPatient.get(p.id) ?? []) }));
+  }, [patients, surgeries]);
+
+
+  /** Alta de paciente: los campos opcionales vacíos viajan como null. */
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setErr(null);
+    e.preventDefault();
+    setFormErr(null);
+    setSaving(true);
     try {
       await api.post("/api/patients", {
-        ...form,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        documentId: form.documentId,
+        // Mediodía UTC: así la fecha no se corre al día anterior en husos negativos (UTC-3).
+        birthDate: form.birthDate ? `${form.birthDate}T12:00:00.000Z` : null,
         phone: form.phone || null,
         email: form.email || null,
         bloodType: form.bloodType || null,
+        allergies: form.allergies || null,
       });
-      setForm({ firstName: "", lastName: "", documentId: "", phone: "", email: "", bloodType: "" });
-      setShowForm(false);
-      load();
-    } catch (e: any) { setErr(e.message); }
+      await queryClient.invalidateQueries({ queryKey: PATIENTS_QUERY_KEY });
+      toast.success(`Paciente ${form.lastName}, ${form.firstName} registrado`);
+      setForm(EMPTY_FORM);
+      setSheetOpen(false);
+    } catch (error) {
+      setFormErr(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function remove(id: string) {
-    if (!confirm("¿Eliminar paciente?")) return;
-    await api.delete(`/api/patients/${id}`);
-    load();
+  /** Baja lógica, confirmada desde el diálogo. */
+  async function remove() {
+    if (!toDelete) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/patients/${toDelete.id}`);
+      await queryClient.invalidateQueries({ queryKey: PATIENTS_QUERY_KEY });
+      toast.success("Paciente dado de baja");
+      setToDelete(null);
+    } catch (error) {
+      toast.error(error);
+    } finally {
+      setDeleting(false);
+    }
   }
+
+  const columns: ColumnDef<PatientRow, any>[] = [
+    {
+      id: "patient",
+      accessorFn: (p) => `${p.lastName} ${p.firstName} ${p.documentId}`,
+      header: "Paciente",
+      cell: (ctx) => {
+        const p = ctx.row.original;
+        const age = ageFrom(p.birthDate);
+        return (
+          <div className="min-w-[180px]">
+            <p className="text-slate-900">{p.lastName}, {p.firstName}</p>
+            <p className="text-xs text-slate-400">
+              DNI {p.documentId}{age !== null && ` · ${age} años`}
+            </p>
+            {/* Sólo se muestra lo crítico: una alergia registrada. */}
+            {p.allergies && <p className="mt-1 text-xs text-rose-600">Alergia: {p.allergies}</p>}
+          </div>
+        );
+      },
+    },
+    {
+      id: "surgery",
+      accessorFn: (p) => `${p.surgery?.procedure ?? ""} ${p.surgery?.publicCode ?? ""}`,
+      header: "Cirugía vigente",
+      cell: (ctx) => {
+        const s = ctx.row.original.surgery;
+        if (!s) return <span className="text-slate-300">—</span>;
+        return (
+          <div className="min-w-[180px]">
+            <p className="text-slate-900">{s.procedure}</p>
+            <p className="text-xs text-slate-400">
+              <span className="font-mono">{formatCode(s.publicCode)}</span> · {isToday(s.scheduledAt) ? "Hoy" : formatDate(s.scheduledAt)} {formatTime(s.scheduledAt)}
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      id: "status",
+      accessorFn: (p) => (p.surgery ? STATUS_LABEL[p.surgery.status] : ""),
+      header: "Estado",
+      cell: (ctx) => {
+        const s = ctx.row.original.surgery;
+        return s ? <StatusBadge status={s.status} waitingRoom={s.waitingRoom} /> : null;
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (ctx) => {
+        const p = ctx.row.original;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {/* Historia clínica (la recepción no accede a datos clínicos). */}
+            {canSeeHistory && (
+              <Link to={`/patients/${p.id}/history`} className="rounded-lg px-3 py-1.5 text-sm text-blue-700 hover:bg-slate-100">
+                Historia
+              </Link>
+            )}
+            {canEdit && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-slate-600" aria-label={`Más acciones para ${p.firstName} ${p.lastName}`}>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {p.surgery && (
+                    <DropdownMenuItem asChild>
+                      <Link to={`/surgeries/${p.surgery.id}`}>Ver cirugía</Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem destructive onClick={() => setToDelete(p)}>
+                    Dar de baja
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Pacientes</h1>
-        {canEdit && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-          >
-            {showForm ? "Cancelar" : "+ Nuevo paciente"}
-          </button>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title="Pacientes"
+        description={`${patients.length} pacientes activos`}
+        actions={
+          canEdit && (
+            <Button onClick={() => { setFormErr(null); setSheetOpen(true); }}>
+              <UserPlus className="h-4 w-4" /> Nuevo paciente
+            </Button>
+          )
+        }
+      />
 
-      {showForm && canEdit && (
-        <form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 grid grid-cols-3 gap-4">
-          {(["firstName","lastName","documentId","phone","email","bloodType"] as const).map((f) => (
-            <div key={f}>
-              <label className="text-xs font-medium text-slate-600 mb-1 block capitalize">{f}</label>
-              <input
-                value={(form as any)[f]}
-                onChange={(e) => setForm({ ...form, [f]: e.target.value })}
-                required={["firstName","lastName","documentId"].includes(f)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          ))}
-          {err && <div className="col-span-3 text-rose-600 text-sm">{err}</div>}
-          <div className="col-span-3">
-            <button className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm">Guardar</button>
-          </div>
-        </form>
-      )}
+      {error && <div className="mb-8"><ErrorAlert message={getErrorMessage(error)} /></div>}
 
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-600">
-            <tr>
-              <th className="text-left px-6 py-3">Documento</th>
-              <th className="text-left px-6 py-3">Nombre</th>
-              <th className="text-left px-6 py-3">Contacto</th>
-              <th className="text-left px-6 py-3">Sangre</th>
-              {canEdit && <th className="px-6 py-3"></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((p) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="px-6 py-3 font-mono text-xs">{p.documentId}</td>
-                <td className="px-6 py-3">{p.lastName}, {p.firstName}</td>
-                <td className="px-6 py-3 text-slate-500">{p.phone ?? p.email ?? "—"}</td>
-                <td className="px-6 py-3">{p.bloodType ?? "—"}</td>
-                {canEdit && (
-                  <td className="px-6 py-3 text-right">
-                    <button onClick={() => remove(p.id)} className="text-rose-600 text-xs hover:underline">Eliminar</button>
-                  </td>
-                )}
-              </tr>
-            ))}
-            {list.length === 0 && <tr><td colSpan={canEdit ? 5 : 4} className="px-6 py-10 text-center text-slate-400">Sin pacientes</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <Card>
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoading}
+          searchPlaceholder="Buscar por nombre, DNI o código"
+          emptyMessage="Sin pacientes registrados"
+        />
+      </Card>
+
+      {/* Alta de paciente */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent
+          title="Nuevo paciente"
+          description="El documento debe ser único."
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+              <Button type="submit" form={FORM_ID} busy={saving}>Registrar paciente</Button>
+            </>
+          }
+        >
+          <form id={FORM_ID} onSubmit={submit} className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <Input label="Nombre" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} required />
+            <Input label="Apellido" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} required />
+            <Input label="Documento (DNI)" value={form.documentId} onChange={(v) => setForm({ ...form, documentId: v })} required />
+            <Input label="Fecha de nacimiento" type="date" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} />
+            <Input label="Teléfono" type="tel" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
+            <Input label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+            <Input label="Grupo sanguíneo" value={form.bloodType} onChange={(v) => setForm({ ...form, bloodType: v })} placeholder="Ej. A+" />
+            <Input label="Alergias" value={form.allergies} onChange={(v) => setForm({ ...form, allergies: v })} placeholder="Ej. Penicilina" />
+            <div className="sm:col-span-2"><ErrorAlert message={formErr} /></div>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        title="¿Dar de baja al paciente?"
+        description={
+          toDelete
+            ? `${toDelete.firstName} ${toDelete.lastName} dejará de aparecer en el directorio. Su historial clínico y sus cirugías se conservan.`
+            : undefined
+        }
+        confirmLabel="Dar de baja"
+        variant="destructive"
+        busy={deleting}
+        onConfirm={() => void remove()}
+      />
+    </>
   );
 }

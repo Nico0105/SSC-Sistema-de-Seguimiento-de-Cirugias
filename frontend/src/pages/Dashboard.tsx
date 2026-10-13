@@ -1,106 +1,159 @@
-import { useEffect, useState } from "react";
-import { api, getSocket } from "../lib/api-client";
-import { STATUS_LABEL, STATUS_COLOR, type SurgeryStatus } from "../lib/surgery-status";
+// ======================================================
+// Inicio — Centro de comando (pages/Dashboard.tsx)
+// Responde tres preguntas, en orden de lectura:
+//   1. ¿Cómo va el día?  → tres métricas (cirugías de hoy,
+//      quirófanos ocupados, demoras).
+//   2. ¿Qué pasa en cada quirófano? → una tarjeta por sala.
+//   3. ¿Qué sigue? → la agenda quirúrgica de hoy.
+// Todo se recalcula solo: las cirugías se invalidan ante cada
+// evento de Socket.IO y un reloj de 30 s actualiza demoras y
+// tiempos en curso sin pedir nada al servidor.
+// ======================================================
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { MonitorPlay, Plus } from "lucide-react";
+import { useSurgeriesQuery } from "../hooks/use-surgeries-query";
+import { useRoomsQuery } from "../hooks/use-catalog-queries";
+import { useClock } from "../hooks/use-clock";
+import { useAuth } from "../lib/auth-context";
+import { can } from "../lib/permissions";
+import { getErrorMessage } from "../lib/api-client";
+import { formatLongDate, isToday } from "../lib/format";
+import { buildDayStats, buildRoomSnapshots } from "../lib/room-status";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { DataTable } from "../components/ui/data-table";
+import { ErrorAlert } from "../components/ui/alert";
+import { FilterPills, type FilterOption } from "../components/ui/filter-pills";
+import { KpiCard } from "../components/ui/kpi-card";
+import { PageHeader } from "../components/ui/page-header";
+import { Skeleton } from "../components/ui/skeleton";
+import { RoomCard } from "../components/RoomCard";
+import { buildSurgeryColumns } from "../components/SurgeryColumns";
 
-interface Surgery {
-  id: string;
-  publicCode: string;
-  procedure: string;
-  status: SurgeryStatus;
-  scheduledAt: string;
-  patient: { firstName: string; lastName: string };
-  operatingRoom: { code: string; name: string } | null;
-}
+type DayFilter = "todas" | "en_curso" | "pendientes";
+
+const columns = buildSurgeryColumns({ showDate: false });
 
 export default function Dashboard() {
-  const [surgeries, setSurgeries] = useState<Surgery[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const { data: surgeries = [], isLoading, error } = useSurgeriesQuery();
+  const { data: rooms = [], isLoading: roomsLoading } = useRoomsQuery();
+  // Reloj de 30 s: suficiente para demoras y tiempos en curso.
+  const now = useClock(30_000);
+  const [filter, setFilter] = useState<DayFilter>("todas");
 
-  async function load() {
-    const list = await api.get<Surgery[]>("/api/surgeries");
-    setSurgeries(list);
-    setLoading(false);
-  }
+  const stats = useMemo(() => buildDayStats(surgeries, rooms, now), [surgeries, rooms, now]);
+  const snapshots = useMemo(() => buildRoomSnapshots(rooms, surgeries, now), [rooms, surgeries, now]);
 
-  useEffect(() => {
-    load();
-    const socket = getSocket();
-    const refresh = () => load();
-    socket.on("surgery:update", refresh);
-    socket.on("surgery:created", refresh);
-    socket.on("surgery:deleted", refresh);
-    return () => {
-      socket.off("surgery:update", refresh);
-      socket.off("surgery:created", refresh);
-      socket.off("surgery:deleted", refresh);
-    };
-  }, []);
-
-  const stats = {
-    total: surgeries.length,
-    enQuirofano: surgeries.filter((s) => s.status === "en_quirofano").length,
-    programadas: surgeries.filter((s) => s.status === "programada").length,
-    alta: surgeries.filter((s) => s.status === "alta").length,
-  };
-
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
-
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total cirugías" value={stats.total} />
-        <StatCard label="En quirófano" value={stats.enQuirofano} highlight />
-        <StatCard label="Programadas" value={stats.programadas} />
-        <StatCard label="Altas" value={stats.alta} />
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="font-semibold text-slate-800">Cirugías recientes</h2>
-        </div>
-        {loading ? (
-          <div className="p-8 text-slate-500">Cargando…</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="text-left px-6 py-3">Código</th>
-                <th className="text-left px-6 py-3">Paciente</th>
-                <th className="text-left px-6 py-3">Procedimiento</th>
-                <th className="text-left px-6 py-3">Quirófano</th>
-                <th className="text-left px-6 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {surgeries.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-6 py-3 font-mono text-xs">{s.publicCode}</td>
-                  <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
-                  <td className="px-6 py-3">{s.procedure}</td>
-                  <td className="px-6 py-3">{s.operatingRoom?.code ?? "—"}</td>
-                  <td className="px-6 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[s.status]}`}>
-                      {STATUS_LABEL[s.status]}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {surgeries.length === 0 && (
-                <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-400">Sin cirugías cargadas</td></tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
+  const today = useMemo(
+    () =>
+      surgeries
+        .filter((s) => isToday(s.scheduledAt) && s.status !== "cancelada")
+        .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt)),
+    [surgeries],
   );
-}
+  const inProgress = today.filter((s) => s.status === "en_quirofano" || s.status === "esperando_en_sala");
+  const pending = today.filter((s) => s.status === "programada");
+  const visible = filter === "en_curso" ? inProgress : filter === "pendientes" ? pending : today;
 
-function StatCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  const filterOptions: FilterOption<DayFilter>[] = [
+    { value: "todas", label: "Todas", count: today.length },
+    { value: "en_curso", label: "En curso", count: inProgress.length },
+    { value: "pendientes", label: "Pendientes", count: pending.length },
+  ];
+
+  const firstDelay = stats.delayed[0];
+
   return (
-    <div className={`rounded-2xl p-5 border ${highlight ? "bg-brand-50 border-brand-100" : "bg-white border-slate-200"}`}>
-      <div className="text-xs text-slate-500 mb-1">{label}</div>
-      <div className={`text-3xl font-bold ${highlight ? "text-brand-700" : "text-slate-800"}`}>{value}</div>
-    </div>
+    <>
+      <PageHeader
+        title="Hoy"
+        description={formatLongDate(now)}
+        actions={
+          <>
+            {/* Se abre en otra pestaña para dejarla fija en el televisor de la sala de espera. */}
+            <Button variant="secondary" asChild>
+              <a href="/board" target="_blank" rel="noreferrer">
+                <MonitorPlay className="h-4 w-4" /> Pantalla de sala de espera
+              </a>
+            </Button>
+            {can(user?.roles, "cirugias:escribir") && (
+              <Button asChild>
+                <Link to="/surgeries?nueva=1">
+                  <Plus className="h-4 w-4" /> Programar cirugía
+                </Link>
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      {error && (
+        <div className="mb-8">
+          <ErrorAlert message={getErrorMessage(error)} />
+        </div>
+      )}
+
+      {/* 1 · Cómo va el día */}
+      <section className="mb-14 grid grid-cols-1 gap-6 md:grid-cols-3" aria-label="Resumen del día">
+        <KpiCard
+          label="Cirugías de hoy"
+          value={stats.total}
+          loading={isLoading}
+          footer={`${stats.active} en curso · ${stats.pending} pendientes`}
+        />
+        <KpiCard
+          label="Quirófanos ocupados"
+          value={stats.busyRooms}
+          unit={`de ${stats.activeRooms}`}
+          loading={isLoading || roomsLoading}
+        />
+        <KpiCard
+          label="Demoras"
+          value={stats.delayed.length}
+          tone={stats.delayed.length > 0 ? "danger" : "navy"}
+          loading={isLoading}
+          footer={
+            firstDelay ? (
+              <Link to={`/surgeries/${firstDelay.id}`} className="hover:text-slate-700">
+                {firstDelay.procedure} — ver detalle
+              </Link>
+            ) : (
+              "Todo en horario"
+            )
+          }
+        />
+      </section>
+
+      {/* 2 · Quirófanos */}
+      <section className="mb-14" aria-labelledby="rooms-title">
+        <h2 id="rooms-title" className="mb-6 text-lg font-semibold text-slate-900">Quirófanos</h2>
+        {roomsLoading ? (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-2xl" />)}
+          </div>
+        ) : snapshots.length === 0 ? (
+          <p className="text-sm text-slate-400">No hay quirófanos activos cargados.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {snapshots.map((snap) => <RoomCard key={snap.room.id} snapshot={snap} now={now} />)}
+          </div>
+        )}
+      </section>
+
+      {/* 3 · Agenda del día */}
+      <Card>
+        <DataTable
+          columns={columns}
+          data={visible}
+          isLoading={isLoading}
+          searchPlaceholder="Buscar"
+          emptyMessage={filter === "todas" ? "No hay cirugías para hoy" : "Ninguna cirugía en este grupo"}
+          title={<h2 className="text-lg font-semibold text-slate-900">Agenda de hoy</h2>}
+          toolbar={<FilterPills options={filterOptions} value={filter} onChange={setFilter} ariaLabel="Filtrar agenda" />}
+        />
+      </Card>
+    </>
   );
 }

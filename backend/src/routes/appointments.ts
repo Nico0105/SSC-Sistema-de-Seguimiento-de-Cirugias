@@ -1,19 +1,31 @@
+// ======================================================
+// Rutas de turnos (/api/appointments)
+// Gestión de turnos de pacientes: consultas, evaluaciones
+// prequirúrgicas, controles postoperatorios y estudios.
+// Lectura: cualquier rol interno. Escritura: roles ABM.
+// ======================================================
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireStaff, requireAbm } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { sendAppointmentConfirmation } from "../lib/email.js";
 
 const router = Router();
-router.use(requireAuth, requireStaff);
+router.use(requireAuth, requirePermission("panel:ver"));
+
+/** Tipos y estados de turno definidos por la documentación funcional. */
+const APPOINTMENT_TYPES = ["consulta", "prequirurgica", "control", "estudio"] as const;
+const APPOINTMENT_STATUSES = ["pendiente", "confirmado", "cancelado", "completado"] as const;
 
 const schema = z.object({
   patientId: z.string().uuid(),
   scheduledAt: z.string().datetime(),
-  type: z.string().min(1),
-  status: z.string().optional(),
+  type: z.enum(APPOINTMENT_TYPES),
+  status: z.enum(APPOINTMENT_STATUSES).optional(),
   notes: z.string().optional().nullable(),
 });
 
+/** Lista todos los turnos con su paciente, ordenados por fecha. */
 router.get("/", async (_req, res, next) => {
   try {
     const list = await prisma.appointment.findMany({
@@ -24,18 +36,29 @@ router.get("/", async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post("/", requireAbm, async (req, res, next) => {
+/** Alta de turno (nace "pendiente" salvo que se indique otro estado). */
+router.post("/", requirePermission("turnos:escribir"), async (req, res, next) => {
   try {
     const data = schema.parse(req.body);
     const created = await prisma.appointment.create({
       data: { ...data, scheduledAt: new Date(data.scheduledAt) },
       include: { patient: true },
     });
+
+    // Confirmación automática por email al paciente (no bloqueante).
+    void sendAppointmentConfirmation({
+      patientEmail: created.patient.email,
+      patientName: created.patient.firstName,
+      type: created.type,
+      scheduledAt: created.scheduledAt,
+    });
+
     res.status(201).json(created);
   } catch (e) { next(e); }
 });
 
-router.patch("/:id", requireAbm, async (req, res, next) => {
+/** Edición parcial de un turno (reprogramar, confirmar, cancelar, etc.). */
+router.patch("/:id", requirePermission("turnos:escribir"), async (req, res, next) => {
   try {
     const data = schema.partial().parse(req.body);
     const updated = await prisma.appointment.update({
@@ -49,7 +72,8 @@ router.patch("/:id", requireAbm, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete("/:id", requireAbm, async (req, res, next) => {
+/** Baja física de un turno. */
+router.delete("/:id", requirePermission("turnos:escribir"), async (req, res, next) => {
   try {
     await prisma.appointment.delete({ where: { id: req.params.id } });
     res.status(204).end();

@@ -1,158 +1,113 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { api, getSocket } from "../lib/api-client";
+// ======================================================
+// Cirugías (pages/Surgeries.tsx)
+// Listado completo de cirugías en tiempo real, con buscador y
+// filtro por etapa, más el alta desde el panel lateral
+// "Programar cirugía" (components/ScheduleSurgerySheet.tsx).
+// El panel también se abre desde el Inicio con /surgeries?nueva=1.
+// Toda cirugía nace "programada"; su estado se avanza desde la
+// página de detalle siguiendo el flujo quirúrgico documentado.
+// ======================================================
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
-import { ABM_ROLES, hasAnyRole } from "../lib/permissions";
-import { STATUS_LABEL, STATUS_COLOR, type SurgeryStatus } from "../lib/surgery-status";
+import { can } from "../lib/permissions";
+import { getErrorMessage } from "../lib/api-client";
+import type { SurgeryStatus } from "../lib/surgery-status";
+import { useSurgeriesQuery } from "../hooks/use-surgeries-query";
+import { usePatientsQuery, useRoomsQuery } from "../hooks/use-catalog-queries";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { DataTable } from "../components/ui/data-table";
+import { ErrorAlert } from "../components/ui/alert";
+import { FilterPills, type FilterOption } from "../components/ui/filter-pills";
+import { PageHeader } from "../components/ui/page-header";
+import { ScheduleSurgerySheet } from "../components/ScheduleSurgerySheet";
+import { buildSurgeryColumns } from "../components/SurgeryColumns";
 
-interface Surgery {
-  id: string;
-  publicCode: string;
-  procedure: string;
-  status: SurgeryStatus;
-  scheduledAt: string;
-  patient: { firstName: string; lastName: string };
-  operatingRoom: { code: string } | null;
-}
+/** Agrupación simple de estados para el filtro (en lugar de un filtro por estado). */
+type Group = "todas" | "programadas" | "en_curso" | "finalizadas";
+const GROUPS: Record<Exclude<Group, "todas">, SurgeryStatus[]> = {
+  programadas: ["programada"],
+  en_curso: ["en_quirofano", "esperando_en_sala", "postoperatorio"],
+  finalizadas: ["alta", "cancelada"],
+};
 
-interface Patient { id: string; firstName: string; lastName: string; }
-interface Room { id: string; code: string; name: string; }
+const columns = buildSurgeryColumns({ showDate: true });
 
 export default function Surgeries() {
   const { user } = useAuth();
-  const canEdit = hasAnyRole(user?.roles, ABM_ROLES);
-  const [list, setList] = useState<Surgery[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    publicCode: "", patientId: "", operatingRoomId: "", procedure: "",
-    surgeonName: "", scheduledAt: "",
-  });
-  const [err, setErr] = useState<string | null>(null);
+  const canEdit = can(user?.roles, "cirugias:escribir");
+  const [params, setParams] = useSearchParams();
+  const [group, setGroup] = useState<Group>("todas");
 
-  async function load() {
-    const [s, p, r] = await Promise.all([
-      api.get<Surgery[]>("/api/surgeries"),
-      api.get<Patient[]>("/api/patients"),
-      api.get<Room[]>("/api/operating-rooms"),
-    ]);
-    setList(s); setPatients(p); setRooms(r);
-  }
+  const { data: surgeries = [], isLoading, error } = useSurgeriesQuery();
+  const { data: patients = [] } = usePatientsQuery();
+  const { data: rooms = [] } = useRoomsQuery();
 
-  useEffect(() => {
-    load();
-    const socket = getSocket();
-    socket.on("surgery:update", load);
-    socket.on("surgery:created", load);
-    socket.on("surgery:deleted", load);
-    return () => {
-      socket.off("surgery:update", load);
-      socket.off("surgery:created", load);
-      socket.off("surgery:deleted", load);
-    };
-  }, []);
+  // El panel de alta se controla por la URL (?nueva=1) para poder abrirlo desde otras pantallas.
+  const sheetOpen = canEdit && params.get("nueva") === "1";
+  const setSheetOpen = (open: boolean) => {
+    const next = new URLSearchParams(params);
+    if (open) next.set("nueva", "1");
+    else next.delete("nueva");
+    setParams(next, { replace: true });
+  };
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setErr(null);
-    try {
-      await api.post("/api/surgeries", {
-        ...form,
-        operatingRoomId: form.operatingRoomId || null,
-        scheduledAt: new Date(form.scheduledAt).toISOString(),
-      });
-      setShowForm(false);
-      setForm({ publicCode: "", patientId: "", operatingRoomId: "", procedure: "", surgeonName: "", scheduledAt: "" });
-      load();
-    } catch (e: any) { setErr(e.message); }
-  }
+  const sorted = useMemo(
+    () => [...surgeries].sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt)),
+    [surgeries],
+  );
+  const inGroup = (g: Exclude<Group, "todas">) => sorted.filter((s) => GROUPS[g].includes(s.status));
+  const visible = group === "todas" ? sorted : inGroup(group);
+
+  const options: FilterOption<Group>[] = [
+    { value: "todas", label: "Todas", count: sorted.length },
+    { value: "programadas", label: "Programadas", count: inGroup("programadas").length },
+    { value: "en_curso", label: "En curso", count: inGroup("en_curso").length },
+    { value: "finalizadas", label: "Finalizadas", count: inGroup("finalizadas").length },
+  ];
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Cirugías</h1>
-        {canEdit && (
-          <button onClick={() => setShowForm(!showForm)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-            {showForm ? "Cancelar" : "+ Nueva cirugía"}
-          </button>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title="Cirugías"
+        description="Todas las intervenciones y su etapa en el circuito quirúrgico."
+        actions={
+          canEdit && (
+            <Button onClick={() => setSheetOpen(true)}>
+              <Plus className="h-4 w-4" /> Programar cirugía
+            </Button>
+          )
+        }
+      />
 
-      {showForm && canEdit && (
-        <form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 grid grid-cols-2 gap-4">
-          <Input label="Código público" value={form.publicCode} onChange={(v) => setForm({ ...form, publicCode: v })} required />
-          <Input label="Procedimiento" value={form.procedure} onChange={(v) => setForm({ ...form, procedure: v })} required />
-          <Select label="Paciente" value={form.patientId} onChange={(v) => setForm({ ...form, patientId: v })} required>
-            <option value="">Seleccionar…</option>
-            {patients.map((p) => <option key={p.id} value={p.id}>{p.lastName}, {p.firstName}</option>)}
-          </Select>
-          <Select label="Quirófano" value={form.operatingRoomId} onChange={(v) => setForm({ ...form, operatingRoomId: v })}>
-            <option value="">—</option>
-            {rooms.map((r) => <option key={r.id} value={r.id}>{r.code} · {r.name}</option>)}
-          </Select>
-          <Input label="Cirujano" value={form.surgeonName} onChange={(v) => setForm({ ...form, surgeonName: v })} />
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Programada para</label>
-            <input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </div>
-          {err && <div className="col-span-2 text-rose-600 text-sm">{err}</div>}
-          <div className="col-span-2">
-            <button className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm">Crear</button>
-          </div>
-        </form>
+      {error && (
+        <div className="mb-8">
+          <ErrorAlert message={getErrorMessage(error)} />
+        </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-600">
-            <tr>
-              <th className="text-left px-6 py-3">Código</th>
-              <th className="text-left px-6 py-3">Paciente</th>
-              <th className="text-left px-6 py-3">Procedimiento</th>
-              <th className="text-left px-6 py-3">Horario</th>
-              <th className="text-left px-6 py-3">Estado</th>
-              <th className="px-6 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((s) => (
-              <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-6 py-3 font-mono text-xs">{s.publicCode}</td>
-                <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
-                <td className="px-6 py-3">{s.procedure}</td>
-                <td className="px-6 py-3 text-slate-500">{new Date(s.scheduledAt).toLocaleString()}</td>
-                <td className="px-6 py-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLOR[s.status]}`}>{STATUS_LABEL[s.status]}</span>
-                </td>
-                <td className="px-6 py-3 text-right">
-                  <Link to={`/surgeries/${s.id}`} className="text-brand-600 text-xs hover:underline">Ver →</Link>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400">Sin cirugías</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+      <Card>
+        <DataTable
+          columns={columns}
+          data={visible}
+          isLoading={isLoading}
+          searchPlaceholder="Buscar paciente, código o procedimiento"
+          emptyMessage={group === "todas" ? "Todavía no hay cirugías registradas" : "Ninguna cirugía en este grupo"}
+          toolbar={<FilterPills options={options} value={group} onChange={setGroup} ariaLabel="Filtrar por etapa" />}
+        />
+      </Card>
 
-function Input({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-slate-600 mb-1 block">{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-    </div>
-  );
-}
-
-function Select({ label, value, onChange, children, required }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; required?: boolean }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-slate-600 mb-1 block">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
-        {children}
-      </select>
-    </div>
+      {canEdit && (
+        <ScheduleSurgerySheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          patients={patients}
+          rooms={rooms}
+          surgeries={surgeries}
+        />
+      )}
+    </>
   );
 }

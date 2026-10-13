@@ -1,67 +1,87 @@
+// ======================================================
+// Página de login (pages/Auth.tsx)
+// Único punto de entrada al panel interno y al portal del
+// paciente: logo, título, dos campos y un botón. Las cuentas
+// las crea un administrador desde "Usuarios" (no hay registro
+// público, según la definición funcional del sistema).
+// ======================================================
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
+import { getErrorMessage } from "../lib/api-client";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { ErrorAlert } from "../components/ui/alert";
+import { BrandMark } from "../components/layout/BrandMark";
+import { homePathFor } from "../components/RoleRoute";
 
 export default function AuthPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  // Si ya hay sesión, no tiene sentido mostrar el login.
+  if (user) return <Navigate to={homePathFor(user.roles)} replace />;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErr(null); setLoading(true);
+    setErr(null);
+    setLoading(true);
     try {
       await login(email, password);
-      navigate("/dashboard");
-    } catch (e: any) {
-      setErr(e.message);
-    } finally { setLoading(false); }
+      navigate("/");
+    } catch (error) {
+      setErr(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-        <h1 className="text-2xl font-bold text-brand-700 mb-1">SSC</h1>
-        <p className="text-sm text-slate-500 mb-6">Iniciar sesión</p>
+    <main className="flex min-h-screen items-center justify-center px-6 py-16">
+      <div className="w-full max-w-sm">
+        <BrandMark size="lg" />
+        <h1 className="mt-10 text-3xl font-semibold tracking-tight text-slate-900">Iniciar sesión</h1>
+        <p className="mt-2 text-slate-500">Seguimiento de cirugías especializadas.</p>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <Field label="Email">
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="input" />
-          </Field>
-          <Field label="Contraseña">
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} className="input" />
-          </Field>
+        <form onSubmit={onSubmit} className="mt-10 space-y-6">
+          <Input label="Email" type="email" value={email} onChange={setEmail} required />
+          <div className="relative">
+            <Input
+              label="Contraseña"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={setPassword}
+              required
+              minLength={8}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              className="absolute right-2 top-[31px] rounded-lg p-1.5 text-slate-300 hover:text-slate-600"
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
 
-          {err && <div className="text-sm text-rose-600">{err}</div>}
+          <ErrorAlert message={err} />
 
-          <button disabled={loading} className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-lg py-2.5 font-medium">
-            {loading ? "..." : "Entrar"}
-          </button>
+          <Button type="submit" size="lg" className="w-full" busy={loading}>
+            Entrar
+          </Button>
         </form>
 
-        <p className="mt-4 text-xs text-slate-400 text-center">
-          ¿No tenés cuenta? Pedile al administrador que te cree una en "Usuarios".
+        <p className="mt-10 text-sm text-slate-400">
+          ¿Sin cuenta? Pedísela al administrador.{" "}
+          <a href="/board" className="text-slate-600 hover:text-slate-900">Sala de espera →</a>
         </p>
       </div>
-
-      <style>{`
-        .input { width: 100%; border: 1px solid rgb(226 232 240); border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none; }
-        .input:focus { border-color: rgb(59 130 246); box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1); }
-      `}</style>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700 mb-1 block">{label}</span>
-      {children}
-    </label>
+    </main>
   );
 }
