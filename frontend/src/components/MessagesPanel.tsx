@@ -9,18 +9,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, getErrorMessage } from "../lib/api-client";
 import { toast } from "../lib/toast";
+import { formatDateTime } from "../lib/format";
 import { Button } from "./ui/button";
+import { Card } from "./ui/card";
 import { ErrorAlert } from "./ui/alert";
-import { Loading } from "./ui/spinner";
+import { Skeleton } from "./ui/skeleton";
 import type { PatientMessage } from "../lib/types";
 
 const MAX_LENGTH = 2000;
 
-/** Texto y color del resultado del envío por email. */
-const EMAIL_STATUS: Record<string, { label: string; className: string }> = {
-  enviado: { label: "Enviado por email", className: "text-emerald-700" },
-  fallido: { label: "No se pudo enviar el email", className: "text-rose-600" },
-  omitido: { label: "Sin email: el paciente no tiene uno cargado", className: "text-slate-500" },
+/** Texto del resultado del envío por email (sólo lo ve el staff). */
+const EMAIL_STATUS: Record<string, string> = {
+  enviado: "Enviado por email",
+  fallido: "No se pudo enviar el email",
+  omitido: "Sólo en el sistema (sin email)",
 };
 
 export default function MessagesPanel({
@@ -59,8 +61,8 @@ export default function MessagesPanel({
       const saved = await api.post<PatientMessage>(endpoint, { body: draft });
       setMessages((prev) => [saved, ...(prev ?? [])]);
       setDraft("");
-      if (saved.emailStatus === "enviado") toast.success("Mensaje guardado y enviado por email");
-      else toast.info(`Mensaje guardado. ${EMAIL_STATUS[saved.emailStatus ?? ""]?.label ?? ""}`);
+      if (saved.emailStatus === "enviado") toast.success("Mensaje enviado");
+      else toast.info(`Mensaje guardado. ${EMAIL_STATUS[saved.emailStatus ?? ""] ?? ""}`);
     } catch (error) {
       toast.error(error);
     } finally {
@@ -69,18 +71,11 @@ export default function MessagesPanel({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
-      <h2 className="font-semibold text-slate-800 mb-1">
-        {canWrite ? "Mensajes al paciente" : "Mensajes de tu médico"}
-      </h2>
-      <p className="text-xs text-slate-500 mb-4">
-        {canWrite
-          ? "Cada mensaje se guarda en este hilo y le llega al paciente por email."
-          : "Indicaciones y comentarios que te dejó tu equipo médico."}
-      </p>
+    <Card className="p-8">
+      <h2 className="text-base font-semibold text-slate-900">{canWrite ? "Mensajes al paciente" : "Mensajes de tu médico"}</h2>
 
       {canWrite && (
-        <form onSubmit={send} className="mb-5">
+        <form onSubmit={send} className="mt-6">
           <label htmlFor="patient-message" className="sr-only">Nuevo mensaje</label>
           <textarea
             id="patient-message"
@@ -88,49 +83,44 @@ export default function MessagesPanel({
             onChange={(e) => setDraft(e.target.value)}
             maxLength={MAX_LENGTH}
             rows={3}
-            placeholder="Escribí una indicación o comentario para el paciente…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
+            placeholder="Escribí una indicación para el paciente…"
+            className="w-full resize-y rounded-xl bg-slate-50 px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
           />
-          <div className="flex items-center justify-between gap-3 mt-2">
+          <div className="mt-3 flex items-center justify-between gap-3">
             <span className="text-xs text-slate-400">
-              {!patientHasEmail && (
-                <span className="text-amber-700">El paciente no tiene email cargado: el mensaje sólo quedará en el sistema. </span>
-              )}
-              {draft.length}/{MAX_LENGTH}
+              {patientHasEmail ? "Le llega por email." : "El paciente no tiene email: quedará sólo en el sistema."}
             </span>
-            <Button type="submit" busy={sending} disabled={!draft.trim()}>
-              Enviar mensaje
-            </Button>
+            <Button type="submit" busy={sending} disabled={!draft.trim()}>Enviar</Button>
           </div>
         </form>
       )}
 
-      <ErrorAlert message={err} />
-
-      {!messages ? (
-        <Loading label="Cargando mensajes…" />
-      ) : messages.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {canWrite ? "Todavía no le dejaste mensajes a este paciente." : "Todavía no tenés mensajes."}
-        </p>
-      ) : (
-        <ol className="space-y-4">
-          {messages.map((m) => {
-            const status = m.emailStatus ? EMAIL_STATUS[m.emailStatus] : null;
-            return (
-              <li key={m.id} className="border-l-2 border-brand-200 pl-4">
-                <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <span className="font-medium text-slate-700">{m.author?.fullName ?? "Equipo médico"}</span>
-                  <span className="text-slate-400">{new Date(m.createdAt).toLocaleString()}</span>
-                  {canWrite && status && <span className={`ml-auto ${status.className}`}>{status.label}</span>}
-                </div>
+      <div className="mt-6">
+        <ErrorAlert message={err} />
+        {!messages ? (
+          <div className="space-y-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : messages.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            {canWrite ? "Todavía no hay mensajes para este paciente." : "Todavía no tenés mensajes."}
+          </p>
+        ) : (
+          <ol className="divide-y divide-slate-100">
+            {messages.map((m) => (
+              <li key={m.id} className="py-5 first:pt-0 last:pb-0">
+                <p className="text-xs text-slate-400">
+                  {m.author?.fullName ?? "Equipo médico"} · {formatDateTime(m.createdAt)}
+                  {canWrite && m.emailStatus && ` · ${EMAIL_STATUS[m.emailStatus] ?? m.emailStatus}`}
+                </p>
                 {/* whitespace-pre-wrap respeta los saltos de línea del médico. */}
-                <p className="text-sm text-slate-800 mt-1 whitespace-pre-wrap break-words">{m.body}</p>
+                <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-slate-800">{m.body}</p>
               </li>
-            );
-          })}
-        </ol>
-      )}
-    </div>
+            ))}
+          </ol>
+        )}
+      </div>
+    </Card>
   );
 }

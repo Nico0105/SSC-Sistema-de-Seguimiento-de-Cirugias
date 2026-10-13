@@ -76,6 +76,8 @@ export interface BoardItem {
   endedAt: string | null;
   waitingRoom: string | null;
   operatingRoom: { code: string; name: string } | null;
+  /** Nombre abreviado ("Mateo R."): el backend nunca envía el nombre completo. */
+  patientName: string;
 }
 
 export interface AppUser {

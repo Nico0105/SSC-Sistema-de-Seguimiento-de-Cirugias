@@ -16,6 +16,7 @@ import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { emit } from "../lib/realtime.js";
 import { canTransition, ALLOWED_TRANSITIONS } from "../lib/surgery-status.js";
 import { HttpError } from "../middleware/error.js";
+import { nextSurgeryCode } from "../lib/surgery-code.js";
 import { getOrCreateChecklist } from "./checklists.js";
 import {
   sendSurgeryConfirmation,
@@ -36,8 +37,9 @@ const PRIORITIES = ["baja", "normal", "alta", "urgencia"] as const;
 
 // Datos generales de la cirugía (ABM). El estado NO se edita por acá:
 // se cambia únicamente por PATCH /:id/status para respetar el flujo.
+// El código público tampoco viene del cliente: lo genera el backend
+// (lib/surgery-code.ts) y no se edita, porque los familiares ya lo tienen.
 const surgerySchema = z.object({
-  publicCode: z.string().min(1),
   patientId: z.string().uuid(),
   operatingRoomId: z.string().uuid().optional().nullable(),
   procedure: z.string().min(1),
@@ -103,8 +105,9 @@ router.get("/:id/history", async (req, res, next) => {
 });
 
 /**
- * Alta de cirugía. Nace siempre en estado "programada" y se registra
- * la primera entrada del timeline con el usuario que la creó.
+ * Alta de cirugía. Nace siempre en estado "programada", con un código
+ * público por tipo de cirugía ("CAT-01", ver lib/surgery-code.ts) y la primera entrada del timeline
+ * con el usuario que la creó.
  */
 router.post("/", requirePermission("cirugias:escribir"), async (req, res, next) => {
   try {
@@ -112,6 +115,7 @@ router.post("/", requirePermission("cirugias:escribir"), async (req, res, next) 
     const created = await prisma.surgery.create({
       data: {
         ...data,
+        publicCode: await nextSurgeryCode(data.procedure),
         scheduledAt: new Date(data.scheduledAt),
         history: { create: { status: "programada", changedBy: req.user!.sub } },
       },

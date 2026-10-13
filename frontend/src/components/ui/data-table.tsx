@@ -2,11 +2,9 @@
 // DataTable (components/ui/data-table.tsx)
 // Tabla genérica reutilizable sobre TanStack Table: buscador
 // global, paginación client-side y un slot de "toolbar" para
-// filtros específicos de cada página (ej. por estado). Antes
-// cada página con tabla (Dashboard, Patients, Surgeries,
-// Appointments, Users, EmailLogs) reimplementaba su propio
-// <table> sin buscador ni paginación — esto reemplaza esa
-// duplicación con una sola implementación.
+// filtros específicos de cada página (ej. por estado).
+// Estilo despejado: sin fondo en el encabezado, filas altas
+// separadas por una línea hiperfina y encabezados en gris.
 //
 // El paginado es client-side a propósito: el volumen de datos
 // de una clínica (cientos de cirugías/pacientes, no millones)
@@ -36,9 +34,13 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   /** Mensaje cuando no hay filas (ni con filtros, ni sin ellos). */
   emptyMessage?: string;
-  /** Filtros adicionales específicos de la página (ej. <Select> de estado). */
+  /** Filtros adicionales específicos de la página (ej. pestañas de estado). */
   toolbar?: ReactNode;
   pageSize?: number;
+  /** Título del panel, a la izquierda del buscador. */
+  title?: ReactNode;
+  /** Resalta una fila (ej. retrasos). */
+  rowClassName?: (row: T) => string | undefined;
 }
 
 export function DataTable<T>({
@@ -49,6 +51,8 @@ export function DataTable<T>({
   emptyMessage = "Sin resultados",
   toolbar,
   pageSize = 10,
+  title,
+  rowClassName,
 }: DataTableProps<T>) {
   const table = useReactTable({
     data,
@@ -67,71 +71,76 @@ export function DataTable<T>({
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-6 py-4 border-b border-slate-200">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      <div className="flex flex-col gap-4 px-8 pt-7 pb-5 md:flex-row md:items-center">
+        {title && <div className="min-w-0 md:mr-auto">{title}</div>}
+        {toolbar}
+        <div className={cn("relative w-full md:max-w-[260px]", !title && "md:mr-auto md:order-first")}>
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
           <input
             value={table.getState().globalFilter ?? ""}
             onChange={(e) => table.setGlobalFilter(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            aria-label={searchPlaceholder}
+            className="w-full rounded-lg bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
           />
         </div>
-        {toolbar}
       </div>
 
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-600">
-          {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id}>
-              {hg.headers.map((header) => (
-                <th key={header.id} className="text-left px-6 py-3 font-medium">
-                  {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {isLoading ? (
-            <TableSkeleton rows={pageSize} cols={columns.length} />
-          ) : rows.length === 0 ? (
-            <EmptyRow colSpan={columns.length}>{emptyMessage}</EmptyRow>
-          ) : (
-            rows.map((row) => (
-              <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-6 py-3">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id}>
+                {hg.headers.map((header) => (
+                  <th key={header.id} className="whitespace-nowrap px-8 pb-3 text-left text-xs font-medium text-slate-400">
+                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
                 ))}
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ))}
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <TableSkeleton rows={Math.min(pageSize, 6)} cols={columns.length} />
+            ) : rows.length === 0 ? (
+              <EmptyRow colSpan={columns.length}>{emptyMessage}</EmptyRow>
+            ) : (
+              rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className={cn("border-t border-slate-100/80 transition-colors hover:bg-slate-50/60", rowClassName?.(row.original))}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-8 py-5 align-middle">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {!isLoading && rows.length > 0 && pageCount > 1 && (
-        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 text-xs text-slate-500">
-          <span>
-            Página {pageIndex + 1} de {pageCount} · {table.getFilteredRowModel().rows.length} resultado(s)
-          </span>
-          <div className="flex gap-1">
+        <div className="flex items-center justify-between border-t border-slate-100/80 px-8 py-4 text-sm text-slate-400">
+          <span>{table.getFilteredRowModel().rows.length} resultados</span>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className={cn(
-                "p-1.5 rounded-md border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed",
-                "hover:bg-slate-50",
-              )}
+              className="rounded-lg p-1.5 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
               aria-label="Página anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
+            <span className="text-slate-600">
+              {pageIndex + 1} de {pageCount}
+            </span>
             <button
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="p-1.5 rounded-md border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+              className="rounded-lg p-1.5 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
               aria-label="Página siguiente"
             >
               <ChevronRight className="h-4 w-4" />

@@ -29,3 +29,8 @@ export { Select } from "./ui/select";
 export { ErrorAlert } from "./ui/alert";
 export { Loading } from "./ui/spinner";
 export { TableCard, EmptyRow } from "./ui/table";
+export { PageHeader, LivePill, Breadcrumbs } from "./ui/page-header";
+export { KpiCard, ProgressBar } from "./ui/kpi-card";
+export { CodeChip, RoomChip, Avatar } from "./ui/identity";
+export { FilterPills, type FilterOption } from "./ui/filter-pills";
+export { Sheet, SheetContent, SheetClose } from "./ui/sheet";

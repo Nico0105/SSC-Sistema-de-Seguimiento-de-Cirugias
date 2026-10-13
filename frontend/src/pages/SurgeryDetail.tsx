@@ -1,18 +1,34 @@
 // ======================================================
-// Detalle de cirugía (pages/SurgeryDetail.tsx)
-// Muestra la ficha completa de una cirugía, permite avanzar
-// su estado (sólo a los roles autorizados y sólo hacia las
-// transiciones válidas del flujo quirúrgico) y presenta el
-// timeline de cambios con fecha y nota.
+// Detalle de una cirugía (pages/SurgeryDetail.tsx)
+// Organizado por divulgación progresiva:
+//   - Arriba, siempre visible: qué cirugía es, en qué estado
+//     está y UNA acción principal para avanzarla (sólo para
+//     roles autorizados y sólo hacia transiciones válidas; el
+//     backend vuelve a validar). Avanzar exige checklist completo.
+//   - Línea de etapas con las horas reales.
+//   - En pestañas: checklist, seguimiento postoperatorio,
+//     historial de cambios y detalles (equipo, notas, etc.).
 // ======================================================
 import { useCallback, useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { api, getErrorMessage } from "../lib/api-client";
 import { useAuth } from "../lib/auth-context";
 import { can } from "../lib/permissions";
-import { ALLOWED_TRANSITIONS, STATUS_COLOR, STATUS_LABEL, type SurgeryStatus } from "../lib/surgery-status";
+import { toast } from "../lib/toast";
+import { ALLOWED_TRANSITIONS, STATUS_LABEL, type SurgeryStatus } from "../lib/surgery-status";
+import { ageFrom, formatCode, formatDate, formatDateTime, formatDuration, formatTime, minutesBetween } from "../lib/format";
 import { useRealtime } from "../hooks/use-realtime";
-import { ErrorAlert, Loading, StatusBadge } from "../components/ui";
+import { useClock } from "../hooks/use-clock";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { ErrorAlert } from "../components/ui/alert";
+import { Loading } from "../components/ui/spinner";
+import { StatusBadge } from "../components/ui/status-badge";
+import { Breadcrumbs } from "../components/ui/page-header";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { SurgeryStepper } from "../components/SurgeryStepper";
 import ChecklistPanel from "../components/ChecklistPanel";
 import PostopPanel from "../components/PostopPanel";
 import type { ChecklistItem, SurgeryDetail as SurgeryDetailData } from "../lib/types";
@@ -21,12 +37,12 @@ export default function SurgeryDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const canChangeStatus = can(user?.roles, "cirugias:cambiar_estado");
-  const canCreatePostop = can(user?.roles, "postop:escribir");
   const canSeeClinical = can(user?.roles, "clinica:ver");
 
   const [surgery, setSurgery] = useState<SurgeryDetailData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   /** Número de sala a informar al pasar a "esperando_en_sala". */
   const [room, setRoom] = useState("");
   /**
@@ -66,6 +82,7 @@ export default function SurgeryDetail() {
         waitingRoom: needsRoom ? room.trim() : undefined,
       });
       setRoom("");
+      toast.success(`Estado actualizado: ${STATUS_LABEL[status]}`);
       await load();
     } catch (error) {
       setErr(getErrorMessage(error));
@@ -75,135 +92,177 @@ export default function SurgeryDetail() {
   }
 
   if (!surgery) {
-    return (
-      <div className="p-8">
-        {err ? <ErrorAlert message={err} /> : <Loading />}
-      </div>
-    );
+    return err ? <ErrorAlert message={err} /> : <Loading label="Cargando cirugía…" />;
   }
 
-  // Sólo se ofrecen los pasos válidos desde el estado actual.
-  const nextStatuses = ALLOWED_TRANSITIONS[surgery.status];
+  // Paso siguiente del flujo (la acción principal) y cancelación (secundaria).
+  const transitions = ALLOWED_TRANSITIONS[surgery.status];
+  const nextStep = transitions.find((s) => s !== "cancelada");
+  const canCancel = transitions.includes("cancelada");
   // Avanzar exige el checklist completo; cancelar no (mismo criterio que el backend).
   const checklistBlocks = (pendingChecks?.length ?? 0) > 0;
+  const patient = surgery.patient;
+  const age = ageFrom(patient.birthDate);
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl">
-      <Link to="/surgeries" className="text-sm text-brand-600 hover:underline">← Volver</Link>
-      <div className="flex items-center justify-between mt-2 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">{surgery.procedure}</h1>
-          <div className="text-sm text-slate-500 font-mono">{surgery.publicCode}</div>
+    <>
+      <Breadcrumbs items={[{ label: "Cirugías", to: "/surgeries" }, { label: formatCode(surgery.publicCode) }]} />
+
+      {/* Qué cirugía es y en qué estado está */}
+      <header className="mb-12 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <StatusBadge status={surgery.status} waitingRoom={surgery.waitingRoom} size="lg" />
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">{surgery.procedure}</h1>
+          <p className="mt-2 text-base text-slate-500">
+            {patient.firstName} {patient.lastName}
+            {age !== null && `, ${age} años`}
+            <span className="mx-2 text-slate-300">·</span>
+            {surgery.operatingRoom ? surgery.operatingRoom.name : "Sin quirófano"}
+            <span className="mx-2 text-slate-300">·</span>
+            <TimeSummary surgery={surgery} />
+          </p>
+          {patient.allergies && <p className="mt-2 text-sm text-rose-600">Alergia: {patient.allergies}</p>}
         </div>
-        <StatusBadge status={surgery.status} waitingRoom={surgery.waitingRoom} size="lg" />
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <Card title="Paciente">
-          <div className="font-medium">{surgery.patient.lastName}, {surgery.patient.firstName}</div>
-          <div className="text-sm text-slate-500 font-mono">{surgery.patient.documentId}</div>
-        </Card>
-        <Card title="Quirófano">
-          <div>{surgery.operatingRoom ? `${surgery.operatingRoom.code} · ${surgery.operatingRoom.name}` : "Sin asignar"}</div>
-        </Card>
-        <Card title="Cirujano">
-          <div>{surgery.surgeonName ?? "—"}</div>
-        </Card>
-        <Card title="Programada">
-          <div>{new Date(surgery.scheduledAt).toLocaleString()}</div>
-          {/* Horarios reales de la intervención (los marca el backend). */}
-          {surgery.startedAt && (
-            <div className="text-xs text-slate-500 mt-1">
-              Inicio: {new Date(surgery.startedAt).toLocaleTimeString()}
-              {surgery.endedAt && ` · Fin: ${new Date(surgery.endedAt).toLocaleTimeString()}`}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <div className="mb-4"><ErrorAlert message={err} /></div>
-
-      {canChangeStatus && nextStatuses.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
-          <h2 className="font-semibold text-slate-800 mb-3">Avanzar estado</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Al salir de quirófano hay que indicar la sala de espera. */}
-            {nextStatuses.includes("esperando_en_sala") && (
-              <label className="flex items-center gap-2 text-xs text-slate-600">
-                N° de sala
+        {/* Acción principal: avanzar al siguiente paso */}
+        {canChangeStatus && nextStep && (
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="flex items-center gap-3">
+              {nextStep === "esperando_en_sala" && (
                 <input
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
                   maxLength={20}
-                  placeholder="Ej. 3"
-                  className="w-20 border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                  placeholder="N° de sala"
+                  aria-label="Número de sala de espera"
+                  className="h-10 w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/15"
                 />
-              </label>
+              )}
+              <Button busy={changing} disabled={checklistBlocks} onClick={() => void changeStatus(nextStep)}>
+                Pasar a {STATUS_LABEL[nextStep].toLowerCase()} <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+            {checklistBlocks && (
+              <p className="text-sm text-amber-700">Falta completar el checklist ({pendingChecks!.length} pendientes).</p>
             )}
-            {nextStatuses.map((st) => (
-              <button
-                key={st}
-                onClick={() => void changeStatus(st)}
-                disabled={changing || (st !== "cancelada" && checklistBlocks)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium border transition bg-white text-slate-700 border-slate-200 hover:border-brand-300 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {STATUS_LABEL[st]} →
+            {canCancel && (
+              <button onClick={() => setConfirmCancel(true)} disabled={changing} className="text-sm text-slate-400 hover:text-rose-600">
+                Cancelar cirugía
               </button>
-            ))}
+            )}
           </div>
-          {checklistBlocks ? (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status">
-              Para avanzar hay que completar el checklist preoperatorio. Falta: {pendingChecks!.join(", ")}.
-            </p>
-          ) : (
-            <p className="text-xs text-slate-400 mt-3">
-              Sólo se muestran los pasos válidos del flujo quirúrgico.
-            </p>
-          )}
-        </div>
-      )}
+        )}
+      </header>
 
-      {/* Checklist y seguimiento: información clínica, oculta para la recepción. */}
-      {canSeeClinical && (
-        <>
-          <div className="mb-6">
-            <ChecklistPanel
-              surgeryId={surgery.id}
-              canEdit={can(user?.roles, "clinica:escribir")}
-              onItemsChange={onChecklistChange}
-            />
-          </div>
-          <div className="mb-6">
-            <PostopPanel surgeryId={surgery.id} canCreate={canCreatePostop} />
-          </div>
-        </>
-      )}
+      {err && <div className="mb-8"><ErrorAlert message={err} /></div>}
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-6">
-        <h2 className="font-semibold text-slate-800 mb-3">Línea de tiempo</h2>
-        <ol className="space-y-3">
-          {surgery.history.map((h) => (
-            <li key={h.id} className="flex items-center gap-3">
-              {/* Punto de color acorde al estado (primera clase = fondo). */}
-              <span className={`w-2 h-2 rounded-full ${STATUS_COLOR[h.status].split(" ")[0]}`} />
-              <span className="text-sm font-medium">{STATUS_LABEL[h.status]}</span>
-              {h.note && <span className="text-xs text-slate-500">— {h.note}</span>}
-              <span className="text-xs text-slate-400 ml-auto">{new Date(h.createdAt).toLocaleString()}</span>
-            </li>
-          ))}
-          {surgery.history.length === 0 && <li className="text-slate-400 text-sm">Sin cambios registrados</li>}
-        </ol>
-      </div>
-    </div>
+      <Card className="mb-12 p-8">
+        <SurgeryStepper status={surgery.status} history={surgery.history} scheduledAt={surgery.scheduledAt} />
+      </Card>
+
+      {/* Lo secundario, en pestañas */}
+      <Tabs defaultValue={canSeeClinical ? "checklist" : "historial"}>
+        <TabsList variant="underline">
+          {canSeeClinical && <TabsTrigger value="checklist">Checklist</TabsTrigger>}
+          {canSeeClinical && <TabsTrigger value="seguimiento">Seguimiento</TabsTrigger>}
+          <TabsTrigger value="historial">Historial</TabsTrigger>
+          <TabsTrigger value="detalles">Detalles</TabsTrigger>
+        </TabsList>
+
+        {/* Checklist y seguimiento: información clínica, oculta para la recepción. */}
+        {canSeeClinical && (
+          <>
+            {/* forceMount: el checklist debe cargarse aunque no esté visible, porque habilita el avance de estado. */}
+            <TabsContent value="checklist" forceMount className="data-[state=inactive]:hidden">
+              <ChecklistPanel
+                surgeryId={surgery.id}
+                canEdit={can(user?.roles, "clinica:escribir")}
+                onItemsChange={onChecklistChange}
+              />
+            </TabsContent>
+            <TabsContent value="seguimiento">
+              <PostopPanel surgeryId={surgery.id} canCreate={can(user?.roles, "postop:escribir")} />
+            </TabsContent>
+          </>
+        )}
+
+        <TabsContent value="historial">
+          <Card className="p-8">
+            {surgery.history.length === 0 ? (
+              <p className="text-sm text-slate-400">Sin cambios registrados.</p>
+            ) : (
+              <ol className="space-y-5">
+                {surgery.history.map((h) => (
+                  <li key={h.id} className="flex items-baseline gap-6">
+                    <span className="w-28 shrink-0 font-mono text-sm text-slate-400">{formatDateTime(h.createdAt)}</span>
+                    <span className="text-sm text-slate-800">
+                      {STATUS_LABEL[h.status]}
+                      {h.note && <span className="text-slate-400"> — {h.note}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="detalles">
+          <Card className="p-8">
+            <dl className="grid grid-cols-1 gap-x-12 gap-y-6 sm:grid-cols-2">
+              <Detail label="Código de seguimiento" value={formatCode(surgery.publicCode)} mono />
+              <Detail label="Cirujano principal" value={surgery.surgeonName ?? "Sin asignar"} />
+              <Detail label="Quirófano" value={surgery.operatingRoom ? `${surgery.operatingRoom.code} · ${surgery.operatingRoom.name}` : "Sin asignar"} />
+              <Detail label="Programada" value={formatDateTime(surgery.scheduledAt)} />
+              <Detail label="Paciente" value={`${patient.lastName}, ${patient.firstName} · DNI ${patient.documentId}`} />
+              {surgery.waitingRoom && <Detail label="Sala de espera" value={`Sala ${surgery.waitingRoom}`} />}
+              {surgery.notes && <Detail label="Notas" value={surgery.notes} />}
+            </dl>
+            <p className="mt-8 text-sm text-slate-500">
+              La pantalla de sala de espera muestra el código, el nombre abreviado (ej. "Mateo R."), los horarios y el estado.
+              {canSeeClinical && (
+                <>
+                  {" "}
+                  <Link to={`/patients/${patient.id}/history`} className="text-blue-700 hover:underline">
+                    Ver historia clínica
+                  </Link>
+                </>
+              )}
+            </p>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="¿Cancelar esta cirugía?"
+        description="La cancelación es definitiva: la cirugía ya no podrá avanzar de estado."
+        confirmLabel="Cancelar cirugía"
+        variant="destructive"
+        busy={changing}
+        onConfirm={() => void changeStatus("cancelada").then(() => setConfirmCancel(false))}
+      />
+    </>
   );
 }
 
-/** Tarjeta simple de la ficha (título + contenido). */
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+/** "En curso hace 45 min" / "Duró 1 h 15 min" / "Programada 08:30". */
+function TimeSummary({ surgery }: { surgery: SurgeryDetailData }) {
+  const now = useClock(30_000);
+  if (surgery.status === "en_quirofano" && surgery.startedAt) {
+    return <>En curso hace {formatDuration(minutesBetween(surgery.startedAt, now))}</>;
+  }
+  if (surgery.startedAt && surgery.endedAt) {
+    return <>Duró {formatDuration(minutesBetween(surgery.startedAt, surgery.endedAt))}</>;
+  }
+  return <>Programada el {formatDate(surgery.scheduledAt)} a las {formatTime(surgery.scheduledAt)}</>;
+}
+
+function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="text-xs text-slate-500 mb-2">{title}</div>
-      {children}
+    <div>
+      <dt className="text-sm text-slate-400">{label}</dt>
+      <dd className={mono ? "mt-1 font-mono text-slate-900" : "mt-1 text-slate-900"}>{value}</dd>
     </div>
   );
 }

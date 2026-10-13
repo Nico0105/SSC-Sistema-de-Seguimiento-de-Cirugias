@@ -26,7 +26,7 @@ export function Select({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-slate-600 mb-1 block">{label}</span>
+      <span className="text-xs font-semibold text-slate-700 mb-1.5 block">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

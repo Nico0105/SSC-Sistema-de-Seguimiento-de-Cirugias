@@ -9,7 +9,7 @@ import type { HTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("animate-pulse rounded-md bg-slate-200", className)} {...props} />;
+  return <div className={cn("animate-pulse rounded-md bg-slate-100", className)} {...props} />;
 }
 
 /** Placeholder de N filas de tabla, para usar dentro de un <tbody>. */
@@ -17,10 +17,10 @@ export function TableSkeleton({ rows = 4, cols = 4 }: { rows?: number; cols?: nu
   return (
     <>
       {Array.from({ length: rows }).map((_, r) => (
-        <tr key={r} className="border-t border-slate-100">
+        <tr key={r} className="border-t border-slate-100/80">
           {Array.from({ length: cols }).map((__, c) => (
-            <td key={c} className="px-6 py-4">
-              <Skeleton className="h-4 w-full max-w-[160px]" />
+            <td key={c} className="px-8 py-5">
+              <Skeleton className="h-4 w-full max-w-[140px]" />
             </td>
           ))}
         </tr>

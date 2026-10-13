@@ -311,3 +311,15 @@ model PatientMessage {
 
   @@index([patientId, createdAt])
 }
+
+// ------------------------------------------------------
+// Códigos públicos de cirugías
+// ------------------------------------------------------
+
+/// Último número usado por cada prefijo de código ("CAT" → 3 = CAT-03).
+/// El prefijo son las 3 primeras letras del procedimiento; cada tipo de
+/// cirugía numera por separado. Ver lib/surgery-code.ts.
+model SurgeryCodeCounter {
+  prefix String @id
+  last   Int    @default(0)
+}

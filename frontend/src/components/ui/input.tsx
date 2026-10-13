@@ -8,7 +8,7 @@
 import { cn } from "../../lib/cn";
 
 const FIELD_CLASSES =
-  "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none " +
+  "w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm outline-none " +
   "focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 bg-white " +
   "placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-400";
 
@@ -34,7 +34,7 @@ export function Input({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-slate-600 mb-1 block">{label}</span>
+      <span className="text-xs font-semibold text-slate-700 mb-1.5 block">{label}</span>
       <input
         type={type}
         value={value}

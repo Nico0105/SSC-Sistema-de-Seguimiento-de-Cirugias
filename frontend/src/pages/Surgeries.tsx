@@ -1,151 +1,113 @@
 // ======================================================
-// Gestión de cirugías (pages/Surgeries.tsx)
-// Listado en tiempo real y alta de cirugías. Toda cirugía
-// nace "programada"; su estado se avanza desde la página
-// de detalle siguiendo el flujo quirúrgico documentado.
+// Cirugías (pages/Surgeries.tsx)
+// Listado completo de cirugías en tiempo real, con buscador y
+// filtro por etapa, más el alta desde el panel lateral
+// "Programar cirugía" (components/ScheduleSurgerySheet.tsx).
+// El panel también se abre desde el Inicio con /surgeries?nueva=1.
+// Toda cirugía nace "programada"; su estado se avanza desde la
+// página de detalle siguiendo el flujo quirúrgico documentado.
 // ======================================================
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { api, getErrorMessage } from "../lib/api-client";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
 import { can } from "../lib/permissions";
-import { useRealtime, SURGERY_EVENTS } from "../hooks/use-realtime";
-import { EmptyRow, ErrorAlert, Input, Loading, PrimaryButton, Select, StatusBadge, TableCard } from "../components/ui";
-import type { OperatingRoom, Patient, Surgery } from "../lib/types";
+import { getErrorMessage } from "../lib/api-client";
+import type { SurgeryStatus } from "../lib/surgery-status";
+import { useSurgeriesQuery } from "../hooks/use-surgeries-query";
+import { usePatientsQuery, useRoomsQuery } from "../hooks/use-catalog-queries";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { DataTable } from "../components/ui/data-table";
+import { ErrorAlert } from "../components/ui/alert";
+import { FilterPills, type FilterOption } from "../components/ui/filter-pills";
+import { PageHeader } from "../components/ui/page-header";
+import { ScheduleSurgerySheet } from "../components/ScheduleSurgerySheet";
+import { buildSurgeryColumns } from "../components/SurgeryColumns";
 
-const EMPTY_FORM = {
-  publicCode: "",
-  patientId: "",
-  operatingRoomId: "",
-  procedure: "",
-  surgeonName: "",
-  scheduledAt: "",
+/** Agrupación simple de estados para el filtro (en lugar de un filtro por estado). */
+type Group = "todas" | "programadas" | "en_curso" | "finalizadas";
+const GROUPS: Record<Exclude<Group, "todas">, SurgeryStatus[]> = {
+  programadas: ["programada"],
+  en_curso: ["en_quirofano", "esperando_en_sala", "postoperatorio"],
+  finalizadas: ["alta", "cancelada"],
 };
+
+const columns = buildSurgeryColumns({ showDate: true });
 
 export default function Surgeries() {
   const { user } = useAuth();
   const canEdit = can(user?.roles, "cirugias:escribir");
+  const [params, setParams] = useSearchParams();
+  const [group, setGroup] = useState<Group>("todas");
 
-  const [list, setList] = useState<Surgery[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [rooms, setRooms] = useState<OperatingRoom[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const { data: surgeries = [], isLoading, error } = useSurgeriesQuery();
+  const { data: patients = [] } = usePatientsQuery();
+  const { data: rooms = [] } = useRoomsQuery();
 
-  // Carga en paralelo el listado y los catálogos del formulario.
-  const load = useCallback(async () => {
-    try {
-      setErr(null);
-      const [s, p, r] = await Promise.all([
-        api.get<Surgery[]>("/api/surgeries"),
-        api.get<Patient[]>("/api/patients"),
-        api.get<OperatingRoom[]>("/api/operating-rooms"),
-      ]);
-      setList(s);
-      setPatients(p);
-      setRooms(r);
-    } catch (error) {
-      setErr(getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // El panel de alta se controla por la URL (?nueva=1) para poder abrirlo desde otras pantallas.
+  const sheetOpen = canEdit && params.get("nueva") === "1";
+  const setSheetOpen = (open: boolean) => {
+    const next = new URLSearchParams(params);
+    if (open) next.set("nueva", "1");
+    else next.delete("nueva");
+    setParams(next, { replace: true });
+  };
 
-  useEffect(() => { void load(); }, [load]);
-  useRealtime(SURGERY_EVENTS, load);
+  const sorted = useMemo(
+    () => [...surgeries].sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt)),
+    [surgeries],
+  );
+  const inGroup = (g: Exclude<Group, "todas">) => sorted.filter((s) => GROUPS[g].includes(s.status));
+  const visible = group === "todas" ? sorted : inGroup(group);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    setSaving(true);
-    try {
-      await api.post("/api/surgeries", {
-        ...form,
-        surgeonName: form.surgeonName || null,
-        operatingRoomId: form.operatingRoomId || null,
-        // El input datetime-local devuelve hora local; se envía en ISO/UTC.
-        scheduledAt: new Date(form.scheduledAt).toISOString(),
-      });
-      setShowForm(false);
-      setForm(EMPTY_FORM);
-      await load();
-    } catch (error) {
-      setErr(getErrorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  }
+  const options: FilterOption<Group>[] = [
+    { value: "todas", label: "Todas", count: sorted.length },
+    { value: "programadas", label: "Programadas", count: inGroup("programadas").length },
+    { value: "en_curso", label: "En curso", count: inGroup("en_curso").length },
+    { value: "finalizadas", label: "Finalizadas", count: inGroup("finalizadas").length },
+  ];
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Cirugías</h1>
-        {canEdit && (
-          <PrimaryButton type="button" onClick={() => setShowForm(!showForm)}>
-            {showForm ? "Cancelar" : "+ Nueva cirugía"}
-          </PrimaryButton>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title="Cirugías"
+        description="Todas las intervenciones y su etapa en el circuito quirúrgico."
+        actions={
+          canEdit && (
+            <Button onClick={() => setSheetOpen(true)}>
+              <Plus className="h-4 w-4" /> Programar cirugía
+            </Button>
+          )
+        }
+      />
 
-      {showForm && canEdit && (
-        <form onSubmit={submit} className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input label="Código público" value={form.publicCode} onChange={(v) => setForm({ ...form, publicCode: v })} required />
-          <Input label="Procedimiento" value={form.procedure} onChange={(v) => setForm({ ...form, procedure: v })} required />
-          <Select label="Paciente" value={form.patientId} onChange={(v) => setForm({ ...form, patientId: v })} required>
-            <option value="">Seleccionar…</option>
-            {patients.map((p) => <option key={p.id} value={p.id}>{p.lastName}, {p.firstName}</option>)}
-          </Select>
-          <Select label="Quirófano" value={form.operatingRoomId} onChange={(v) => setForm({ ...form, operatingRoomId: v })}>
-            <option value="">—</option>
-            {rooms.map((r) => <option key={r.id} value={r.id}>{r.code} · {r.name}</option>)}
-          </Select>
-          <Input label="Cirujano" value={form.surgeonName} onChange={(v) => setForm({ ...form, surgeonName: v })} />
-          <Input label="Programada para" type="datetime-local" value={form.scheduledAt} onChange={(v) => setForm({ ...form, scheduledAt: v })} required />
-          <div className="md:col-span-2"><ErrorAlert message={err} /></div>
-          <div className="md:col-span-2">
-            <PrimaryButton busy={saving}>Crear</PrimaryButton>
-          </div>
-        </form>
+      {error && (
+        <div className="mb-8">
+          <ErrorAlert message={getErrorMessage(error)} />
+        </div>
       )}
 
-      {!showForm && <div className="mb-4"><ErrorAlert message={err} /></div>}
+      <Card>
+        <DataTable
+          columns={columns}
+          data={visible}
+          isLoading={isLoading}
+          searchPlaceholder="Buscar paciente, código o procedimiento"
+          emptyMessage={group === "todas" ? "Todavía no hay cirugías registradas" : "Ninguna cirugía en este grupo"}
+          toolbar={<FilterPills options={options} value={group} onChange={setGroup} ariaLabel="Filtrar por etapa" />}
+        />
+      </Card>
 
-      <TableCard>
-        {loading ? (
-          <Loading />
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="text-left px-6 py-3">Código</th>
-                <th className="text-left px-6 py-3">Paciente</th>
-                <th className="text-left px-6 py-3">Procedimiento</th>
-                <th className="text-left px-6 py-3">Horario</th>
-                <th className="text-left px-6 py-3">Estado</th>
-                <th className="px-6 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-6 py-3 font-mono text-xs">{s.publicCode}</td>
-                  <td className="px-6 py-3">{s.patient.lastName}, {s.patient.firstName}</td>
-                  <td className="px-6 py-3">{s.procedure}</td>
-                  <td className="px-6 py-3 text-slate-500">{new Date(s.scheduledAt).toLocaleString()}</td>
-                  <td className="px-6 py-3"><StatusBadge status={s.status} waitingRoom={s.waitingRoom} /></td>
-                  <td className="px-6 py-3 text-right">
-                    <Link to={`/surgeries/${s.id}`} className="text-brand-600 text-xs hover:underline">Ver →</Link>
-                  </td>
-                </tr>
-              ))}
-              {list.length === 0 && <EmptyRow colSpan={6}>Sin cirugías</EmptyRow>}
-            </tbody>
-          </table>
-        )}
-      </TableCard>
-    </div>
+      {canEdit && (
+        <ScheduleSurgerySheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          patients={patients}
+          rooms={rooms}
+          surgeries={surgeries}
+        />
+      )}
+    </>
   );
 }

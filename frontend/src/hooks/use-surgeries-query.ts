@@ -13,12 +13,14 @@ import type { Surgery } from "../lib/types";
 
 export const SURGERIES_QUERY_KEY = ["surgeries"] as const;
 
-export function useSurgeriesQuery() {
+/** `enabled: false` evita pedir el listado a usuarios sin acceso al panel (ej. pacientes). */
+export function useSurgeriesQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: SURGERIES_QUERY_KEY,
     queryFn: () => api.get<Surgery[]>("/api/surgeries"),
+    enabled,
   });
 
   useRealtime(SURGERY_EVENTS, () => {

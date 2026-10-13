@@ -37,7 +37,7 @@ export function ConfirmDialog({
       <DialogContent title={title} description={description}>
         {children}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancelar
           </Button>
           <Button variant={variant} onClick={onConfirm} busy={busy}>

@@ -1,12 +1,16 @@
 // ======================================================
 // UserMenu (components/layout/UserMenu.tsx)
-// Reemplaza el email + "Cerrar sesión" sueltos al pie del
-// sidebar por un menú desplegable (avatar con iniciales,
-// roles, cerrar sesión). Vive al pie del Sidebar.
+// Avatar con iniciales en la barra superior azul. Al hacer clic
+// despliega lo secundario (divulgación progresiva): nombre,
+// email y roles, estado de la conexión en tiempo real, acceso
+// a la pantalla de sala de espera y "Cerrar sesión".
 // ======================================================
-import { LogOut } from "lucide-react";
+import { LogOut, MonitorPlay } from "lucide-react";
 import { useAuth } from "../../lib/auth-context";
-import { ROLE_LABEL, type Role } from "../../lib/permissions";
+import { ROLE_LABEL, can, type Role } from "../../lib/permissions";
+import { useSocketStatus } from "../../hooks/use-socket-status";
+import { cn } from "../../lib/cn";
+import { Avatar } from "../ui/identity";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,18 +19,9 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 
-/** Iniciales del usuario para el avatar (ej. "Ana Gómez" → "AG"). */
-function getInitials(name: string | undefined): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-export function UserMenu({ collapsed }: { collapsed?: boolean }) {
+export function UserMenu() {
   const { user, signOut } = useAuth();
+  const { connected } = useSocketStatus();
   if (!user) return null;
 
   const roleLabels = user.roles.map((r) => ROLE_LABEL[r as Role] ?? r).join(", ");
@@ -34,27 +29,32 @@ export function UserMenu({ collapsed }: { collapsed?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          className="flex items-center gap-3 w-full rounded-lg px-2 py-2 hover:bg-slate-50 transition text-left"
-          aria-label="Menú de usuario"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-xs font-semibold">
-            {getInitials(user.fullName)}
+        <button className="flex items-center gap-3 rounded-full p-0.5 pr-1 hover:bg-white/10" aria-label="Menú de usuario">
+          <span className="hidden text-right lg:block">
+            <span className="block max-w-[180px] truncate text-sm font-medium text-white">{user.fullName}</span>
           </span>
-          {!collapsed && (
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-slate-700 truncate">{user.fullName}</span>
-              <span className="block text-xs text-slate-400 truncate">{roleLabels}</span>
-            </span>
-          )}
+          <Avatar name={user.fullName} size="sm" className="bg-white/15 text-white" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <div className="px-2 py-1.5">
-          <p className="text-sm font-medium text-slate-800 truncate">{user.fullName}</p>
-          <p className="text-xs text-slate-400 truncate">{user.email}</p>
+      <DropdownMenuContent align="end">
+        <div className="px-3 py-2.5">
+          <p className="truncate text-sm font-medium text-slate-900">{user.fullName}</p>
+          <p className="truncate text-xs text-slate-500">{user.email}</p>
+          <p className="mt-1 text-xs text-slate-400">{roleLabels}</p>
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+            <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-emerald-500" : "bg-amber-400")} />
+            {connected ? "Sincronizado en tiempo real" : "Reconectando…"}
+          </p>
         </div>
         <DropdownMenuSeparator />
+        {can(user.roles, "panel:ver") && (
+          <DropdownMenuItem asChild>
+            <a href="/board" target="_blank" rel="noreferrer">
+              <MonitorPlay className="h-4 w-4" />
+              Pantalla de sala de espera
+            </a>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem destructive onClick={signOut}>
           <LogOut className="h-4 w-4" />
           Cerrar sesión
